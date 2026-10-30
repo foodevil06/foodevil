@@ -35,3 +35,7 @@ _tmp/voice_in/*.wav
 public/vnutri1/
 _tmp/vnutri1/*.mp4
 out/*_shots/
+_tmp/vnutri2/*/
+!_tmp/vnutri2/lines/
+_tmp/vnutri2/*.mp4
+public/vnutri2/

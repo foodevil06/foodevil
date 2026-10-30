@@ -16,3 +16,4 @@
 | Скилл cartoon-acting (руководство и лист эмоций) | github.com/JohnHeibel/ClaudeAnimationBase | MIT (John Heibel) |
 | Звуки `public/sfx/v_*.opus` («Курьер уже внутри»: стуки, шкаф, скрип, термопакет, молния, гул, тишина комнаты) | сгенерированы ElevenLabs (SFX) через Lumean | по условиям ElevenLabs для платных генераций |
 | Голос «Курьер уже внутри» | ElevenLabs, голос Николай 3EuKHIEZbSzrHGNmdYsx, через Lumean | по условиям ElevenLabs |
+| Звуки `public/sfx/v2_*.opus` (часть 2: удары в дверь, ручка, цепочка, ключ, коврик, стекло, вдох, падение телефона, дыхание) | сгенерированы ElevenLabs (SFX) через Lumean | по условиям ElevenLabs для платных генераций |

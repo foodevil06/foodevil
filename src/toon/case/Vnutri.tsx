@@ -295,9 +295,9 @@ export const VideoContent: React.FC<{t: number; s: number; hero: Hero; noise?: n
 );
 
 // red end card
-export const EndCard: React.FC<{k: number}> = ({k}) => (
+export const EndCard: React.FC<{k: number; part?: number}> = ({k, part = 2}) => (
   <AbsoluteFill style={{background: V.black, alignItems: 'center', justifyContent: 'center', paddingRight: 1080 - 2 * SAFE.cx, paddingBottom: 200}}>
-    <div style={{opacity: k, fontFamily: MONT, fontWeight: 900, fontSize: 92, color: V.red, letterSpacing: 2, textShadow: '0 0 30px rgba(226,59,59,0.5)'}}>ЧАСТЬ 2</div>
+    <div style={{opacity: k, fontFamily: MONT, fontWeight: 900, fontSize: 92, color: V.red, letterSpacing: 2, textShadow: '0 0 30px rgba(226,59,59,0.5)'}}>ЧАСТЬ {part}</div>
     <div style={{opacity: k, fontFamily: MONT, fontWeight: 800, fontSize: 44, color: V.red, letterSpacing: 8, marginTop: 10}}>СКОРО</div>
   </AbsoluteFill>
 );

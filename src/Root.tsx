@@ -9,6 +9,7 @@ import {Kurier, KU_FPS, KU_SEC} from './toon/episodes/Kurier';
 import {Kurier2, K2_FPS, K2_SEC} from './toon/episodes/Kurier2';
 import {BinanceHeist, HE_FPS, HE_SEC} from './toon/episodes/BinanceHeist';
 import {Vnutri1, VN1_FPS, VN1_SEC} from './toon/episodes/Vnutri1';
+import {Vnutri2, VN2_FPS, VN2_SEC} from './toon/episodes/Vnutri2';
 import {StickExample, StickPoses, InfoCards, SX_FPS, SX_SEC} from './toon/episodes/StickExample';
 
 export const Root: React.FC = () => (
@@ -31,5 +32,7 @@ export const Root: React.FC = () => (
     <Composition id="BinanceHeistSafe" component={BinanceHeist} width={1080} height={1920} fps={HE_FPS} durationInFrames={Math.round(HE_SEC * HE_FPS)} defaultProps={{audio: false, safe: true}} />
     <Composition id="Vnutri1" component={Vnutri1} width={1080} height={1920} fps={VN1_FPS} durationInFrames={Math.round(VN1_SEC * VN1_FPS)} defaultProps={{audio: true}} />
     <Composition id="Vnutri1Safe" component={Vnutri1} width={1080} height={1920} fps={VN1_FPS} durationInFrames={Math.round(VN1_SEC * VN1_FPS)} defaultProps={{audio: false, safe: true}} />
+    <Composition id="Vnutri2" component={Vnutri2} width={1080} height={1920} fps={VN2_FPS} durationInFrames={Math.round(VN2_SEC * VN2_FPS)} defaultProps={{audio: true}} />
+    <Composition id="Vnutri2Safe" component={Vnutri2} width={1080} height={1920} fps={VN2_FPS} durationInFrames={Math.round(VN2_SEC * VN2_FPS)} defaultProps={{audio: false, safe: true}} />
   </>
 );

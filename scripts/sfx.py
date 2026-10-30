@@ -9,7 +9,8 @@
 #   "music":  {"file": "public/music/track.mp3", "gain": 0.2, "t0": 0, "t1": "end", "from": 0, "loop": true, "fade": 2}
 #             (or a list of such pieces, e.g. to stop the track before the big hit and start it again after),
 #   "duck":   {"db": 7, "music_db": 9, "smooth": 0.12, "fx_db": 9, "fx_gap": 5} | false}
-#   sample: a ready sound file (file, gain, from, dur, fade) — messenger ding, typing, knock from ElevenLabs or a library |
+#   sample: a ready sound file (file, gain, from, dur, fade) — messenger ding, typing, knock from ElevenLabs or a library;
+#           "pan": -1..1 puts it left/right in stereo (a whisper behind the ear) and skips the fx ceiling: its gain is final |
 #   tick: short click (f1, f2, decay) | thump: low hit (f0, f1, decay) | notes: soft bell notes (notes, step, decay) | glide: tonal swell (f0, f1, dur)
 # Times: seconds, or relative to the voice so nothing drifts after re-voicing:
 #   "@word+0.2" (first word starting like that), "line:4-0.15" (start of line 4), "end" (end of the episode).
@@ -70,6 +71,7 @@ N = int(C['total'] * SR)
 t = np.arange(N) / SR
 pads = np.zeros(N)
 fx = np.zeros(N)
+fxp = np.zeros((N, 2))  # panned samples (stereo, outside the fx ceiling)
 
 
 def place(sig, at):
@@ -110,7 +112,12 @@ for e in C.get('events', []):
         if e.get('dur'): x = x[:int(e['dur'] * SR)]
         fd = int(e.get('fade', 0.01) * SR)
         if 0 < fd < len(x): x[-fd:] *= np.linspace(1, 0, fd)
-        place(g * x, at)
+        if 'pan' in e:  # constant-power pan
+            a = (np.clip(e['pan'], -1, 1) + 1) * np.pi / 4
+            i = max(0, int(at * SR)); j = min(N, i + len(x))
+            if j > i: fxp[i:j] += g * x[:j - i, None] * np.array([np.cos(a), np.sin(a)])
+        else:
+            place(g * x, at)
     elif e['type'] == 'glide':
         d = e.get('dur', 1.2); x = np.arange(int(d * SR)) / SR
         f = e['f0'] + (e['f1'] - e['f0']) * x / d
@@ -145,7 +152,7 @@ if duck_on and D.get('fx_db', 9) is not False:
           f'loudest fx was {max(0.0, float(over.max())):.1f} dB over it, now reduced')
     fx = fx * g
 
-bed = np.repeat((pads * duck_pads)[:, None], 2, axis=1) + fx[:, None]
+bed = np.repeat((pads * duck_pads)[:, None], 2, axis=1) + fx[:, None] + fxp
 
 # ---------- optional music track (the user's file) ----------
 MUS = C.get('music') or []

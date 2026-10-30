@@ -115,8 +115,8 @@ export const BigClock: React.FC<{time: string; y?: number; size?: number; o?: nu
 );
 
 // subtitles: the current phrase in chunks of 1-4 words, up to ~16 letters (break after punctuation); the spoken word sits in a box.
-// tone per line: 'white' | 'yellow' | 'red'. `y` is the bottom edge: a second line grows upwards, never into the TikTok caption strip.
-export const CaseSubs: React.FC<{lines: VLine[]; f: number; fps: number; total: number; tone?: (i: number) => 'white' | 'yellow' | 'red'; y?: number}> =
+// tone per line: 'white' | 'yellow' | 'red' | 'blue' (e.g. a second voice: the phone). `y` is the bottom edge: a second line grows upwards, never into the TikTok caption strip.
+export const CaseSubs: React.FC<{lines: VLine[]; f: number; fps: number; total: number; tone?: (i: number) => 'white' | 'yellow' | 'red' | 'blue'; y?: number}> =
   ({lines, f, fps, total, tone = () => 'white', y = SAFE.bottom - 20}) => {
   const t = f / fps;
   const li = lines.findIndex((l, i) => t >= l.start - 0.06 && t < (i + 1 < lines.length ? lines[i + 1].start - 0.06 : total));
@@ -133,7 +133,7 @@ export const CaseSubs: React.FC<{lines: VLine[]; f: number; fps: number; total: 
   let wi = 0;
   line.words.forEach((w, i) => { if (t >= w.t - 0.04) wi = i; });
   const chunk = chunks.find((c) => c.includes(wi))!;
-  const box = {white: ['#ffffff', C.ink], yellow: [C.yellow, C.ink], red: [C.red, '#ffffff']}[tone(li)];
+  const box = {white: ['#ffffff', C.ink], yellow: [C.yellow, C.ink], red: [C.red, '#ffffff'], blue: ['#9cc0ff', C.ink]}[tone(li)];
   const pop = spring01(f, line.words[wi].t * fps - 1, fps, 3.4, 0.55);
   const lastWord = line.words.length - 1 === wi;
   const longest = Math.max(...chunk.map((i) => line.words[i].w.length));
