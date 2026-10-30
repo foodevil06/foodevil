@@ -9,6 +9,11 @@
 Субтитры прижаты нижним краем к y = 1480 и растут вверх.
 Концовка: призыв «Часть 2 — подпишись», не длиннее 2 строк, в безопасной зоне.
 
-Голос: ElevenLabs через Lumean, voice_id HcaxAsrhw4ByUo4CBCBN (выбран пользователем), модель eleven_multilingual_v2.
+Голос рассказчика (всегда, выбран пользователем 30.10.2026): **Николай** — ElevenLabs `3EuKHIEZbSzrHGNmdYsx`
+(«Nikolay — Confident, Clear and Engaging», профессиональный клон, самый востребованный русский голос), через Lumean.
+Настройки: модель eleven_multilingual_v2, stability 0.5, similarity 0.8, speed 1.0. В тексте для голоса без многоточий
+(на «…» модель тянет звуки) и без тире; числа словами. Шапка lines.json:
+`{"engine": "elevenlabs", "voice": "3EuKHIEZbSzrHGNmdYsx", "model": "eleven_multilingual_v2", "stability": 0.5, "similarity": 0.8, "speed": 1.0, ...}`
+Прежний голос «Максим, Calm & Neutral» (HcaxAsrhw4ByUo4CBCBN) — им озвучены «Курьер 2» и «Ограбление века».
 Озвучка: python scripts/lumean.py tts _tmp/<ролик>/lines.lumean.json public/<ролик>. Запасной голос: edge-tts Светлана (звучит роботизированно). Звук: тональный фон, −14 LUFS.
 Потоки рендера: TOON_THREADS=2.
