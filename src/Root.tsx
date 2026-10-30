@@ -6,6 +6,7 @@ import {Example3D} from './toon/episodes/Example3D';
 import {Case01, C1_FPS, C1_SEC} from './toon/episodes/Case01';
 import {StyleFrames} from './toon/episodes/StyleFrames';
 import {Kurier, KU_FPS, KU_SEC} from './toon/episodes/Kurier';
+import {Kurier2, K2_FPS, K2_SEC} from './toon/episodes/Kurier2';
 import {StickExample, StickPoses, InfoCards, SX_FPS, SX_SEC} from './toon/episodes/StickExample';
 
 export const Root: React.FC = () => (
@@ -22,5 +23,7 @@ export const Root: React.FC = () => (
     <Composition id="StyleFramesSafe" component={StyleFrames} width={1080} height={1920} fps={30} durationInFrames={180} defaultProps={{safe: true}} />
     <Composition id="Kurier" component={Kurier} width={1080} height={1920} fps={KU_FPS} durationInFrames={Math.round(KU_SEC * KU_FPS)} defaultProps={{audio: true}} />
     <Composition id="KurierSafe" component={Kurier} width={1080} height={1920} fps={KU_FPS} durationInFrames={Math.round(KU_SEC * KU_FPS)} defaultProps={{audio: false, safe: true}} />
+    <Composition id="Kurier2" component={Kurier2} width={1080} height={1920} fps={K2_FPS} durationInFrames={Math.round(K2_SEC * K2_FPS)} defaultProps={{audio: true}} />
+    <Composition id="Kurier2Safe" component={Kurier2} width={1080} height={1920} fps={K2_FPS} durationInFrames={Math.round(K2_SEC * K2_FPS)} defaultProps={{audio: false, safe: true}} />
   </>
 );

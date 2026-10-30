@@ -11,7 +11,7 @@ const PW = 800, PH = 1150, PX = SAFE.cx - PW / 2, PY = 165;
 export type Note = {at: number; app: string; title: string; text: string; color?: string; stars?: boolean};
 
 // phone body shared by lock screen and app screens; `glow` tints the frame (green = trusted, red = danger)
-const Body: React.FC<{t: number; glow?: string; children: React.ReactNode; shake?: number}> = ({t, glow, children, shake = 0}) => (
+export const Body: React.FC<{t: number; glow?: string; children: React.ReactNode; shake?: number}> = ({t, glow, children, shake = 0}) => (
   <div style={{position: 'absolute', left: PX + wobble(t * 40, 2) * shake * 14, top: PY + wobble(t * 0.6, 4) * 6, width: PW, height: PH, borderRadius: 96, background: '#05070b',
     boxShadow: `0 0 0 4px ${glow ?? '#2a303c'}, 0 0 ${glow ? 70 : 0}px ${glow ?? 'transparent'}, 0 40px 80px rgba(0,0,0,0.6)`}}>
     <div style={{position: 'absolute', inset: 18, borderRadius: 80, overflow: 'hidden', background: '#0e1320', fontFamily: UI}}>{children}</div>

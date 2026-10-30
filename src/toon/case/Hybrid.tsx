@@ -2,7 +2,7 @@
 // the case-file props of the mystery (ref 1). Signature device: a red thread that ties evidence together and
 // leads the camera from one clue to the next. Everything is screen space 1080x1920, TikTok safe zones from Kit.
 import React from 'react';
-import {AbsoluteFill} from 'remotion';
+import {AbsoluteFill, Img, staticFile} from 'remotion';
 import {clamp, easeOut, mulberry32, spring01, wobble} from '../lib/anim';
 import {C, MONO, MONT, SAFE, UI} from './Kit';
 
@@ -12,16 +12,19 @@ export const H = {
   map: '#2c3d2c', mapDark: '#223222', road: '#6f7a6a', river: '#2f5a7a', roof: '#7a3b34', thread: '#e0383b',
 };
 
-// film grain + vignette on top of every shot (kept light so text stays crisp)
-export const Grain: React.FC<{f: number; k?: number}> = ({f, k = 0.08}) => (
-  <AbsoluteFill style={{pointerEvents: 'none'}}>
-    <svg width={1080} height={1920} style={{position: 'absolute', opacity: k, mixBlendMode: 'overlay'}}>
-      <filter id={`gr${f % 3}`}><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves={2} seed={f % 3} /><feColorMatrix type="saturate" values="0" /></filter>
-      <rect width={1080} height={1920} filter={`url(#gr${f % 3})`} />
-    </svg>
-    <div style={{position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 78% 62% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.62) 100%)'}} />
-  </AbsoluteFill>
-);
+// film grain + vignette on top of every shot (kept light so text stays crisp). The grain is one of four pre-made
+// noise tiles (public/fx/grain*.png) jittered per frame: same look as feTurbulence, but nothing to compute per frame.
+export const Grain: React.FC<{f: number; k?: number}> = ({f, k = 0.08}) => {
+  const r = mulberry32(f * 7 + 1);
+  return (
+    <AbsoluteFill style={{pointerEvents: 'none'}}>
+      <AbsoluteFill style={{opacity: k * 1.6, mixBlendMode: 'overlay', overflow: 'hidden'}}>
+        <Img src={staticFile(`fx/grain${f % 4}.png`)} style={{position: 'absolute', left: -Math.floor(r() * 60), top: -Math.floor(r() * 60), width: 1140, height: 1980, imageRendering: 'pixelated'}} />
+      </AbsoluteFill>
+      <div style={{position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 78% 62% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.62) 100%)'}} />
+    </AbsoluteFill>
+  );
+};
 
 // "• НОЧЬ 1 — 03:00" chip at the top of the safe area
 export const DayChip: React.FC<{text: string; o?: number}> = ({text, o = 1}) => (

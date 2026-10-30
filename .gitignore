@@ -8,3 +8,12 @@ _tmp/sfxtest/
 _tmp/check/
 *.log
 _tmp/kurier2/voice/
+_tmp/kurier2/*/
+!_tmp/kurier2/voice.json
+_tmp/kurier2/*.png
+_tmp/kurier2/*.log
+_tmp/kurier2/*.tsv
+_tmp/models/
+_tmp/icons/
+_tmp/npm.log
+public/kurier2/
