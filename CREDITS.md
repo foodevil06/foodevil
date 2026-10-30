@@ -14,3 +14,5 @@
 | Скилл howseen-motion-design (без mcp21_client.py) | github.com/howseen-ai/claude-motion-design | MIT |
 | Скиллы character-consistency, video-prompt-director | github.com/nigo-studio/ai-film-skills | MIT |
 | Скилл cartoon-acting (руководство и лист эмоций) | github.com/JohnHeibel/ClaudeAnimationBase | MIT (John Heibel) |
+| Звуки `public/sfx/v_*.opus` («Курьер уже внутри»: стуки, шкаф, скрип, термопакет, молния, гул, тишина комнаты) | сгенерированы ElevenLabs (SFX) через Lumean | по условиям ElevenLabs для платных генераций |
+| Голос «Курьер уже внутри» | ElevenLabs, голос Николай 3EuKHIEZbSzrHGNmdYsx, через Lumean | по условиям ElevenLabs |

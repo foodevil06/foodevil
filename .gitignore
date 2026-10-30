@@ -29,3 +29,7 @@ _tmp/mascot/
 public/nitka/
 _tmp/voices_ru/
 _tmp/voices2/
+_tmp/vnutri1/*/
+_tmp/vnutri1/*.wav
+_tmp/voice_in/*.wav
+public/vnutri1/

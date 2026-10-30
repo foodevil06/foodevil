@@ -136,13 +136,15 @@ export const CaseSubs: React.FC<{lines: VLine[]; f: number; fps: number; total: 
   const box = {white: ['#ffffff', C.ink], yellow: [C.yellow, C.ink], red: [C.red, '#ffffff']}[tone(li)];
   const pop = spring01(f, line.words[wi].t * fps - 1, fps, 3.4, 0.55);
   const lastWord = line.words.length - 1 === wi;
+  const longest = Math.max(...chunk.map((i) => line.words[i].w.length));
+  const fs = Math.min(88, Math.floor((SAFE.right - SAFE.left - 40) / (longest * 0.76)));  // a long word never runs past the safe area
   const fade = lastWord ? 1 - clamp((t - line.end - 0.25) / 0.2) : 1;
   return (
     <div style={{position: 'absolute', left: SAFE.left, right: 1080 - SAFE.right, bottom: 1920 - y, display: 'flex', justifyContent: 'center', alignContent: 'flex-end', flexWrap: 'wrap', gap: '6px 18px', opacity: fade}}>
       {chunk.map((i) => {
         const on = i === wi, said = i <= wi;
         return (
-          <span key={i} style={{fontFamily: MONT, fontWeight: 900, fontSize: 88, lineHeight: 1.12, textTransform: 'uppercase',
+          <span key={i} style={{fontFamily: MONT, fontWeight: 900, fontSize: fs, lineHeight: 1.12, textTransform: 'uppercase',
             padding: on ? '0 16px' : '0 2px', borderRadius: 10, background: on ? box[0] : 'transparent',
             color: on ? box[1] : '#ffffff', opacity: said ? 1 : 0.92,
             WebkitTextStroke: on ? undefined : `3px ${C.ink}`, paintOrder: 'stroke fill',
