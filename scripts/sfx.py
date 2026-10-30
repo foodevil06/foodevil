@@ -8,13 +8,14 @@
 #   "events": [{"type": "tick"|"thump"|"notes"|"glide"|"sample", "t", "gain", ...}],
 #   "music":  {"file": "public/music/track.mp3", "gain": 0.2, "t0": 0, "t1": "end", "from": 0, "loop": true, "fade": 2}
 #             (or a list of such pieces, e.g. to stop the track before the big hit and start it again after),
-#   "duck":   {"db": 7, "music_db": 9, "smooth": 0.12} | false}
+#   "duck":   {"db": 7, "music_db": 9, "smooth": 0.12, "fx_db": 9, "fx_gap": 5} | false}
 #   sample: a ready sound file (file, gain, from, dur, fade) — messenger ding, typing, knock from ElevenLabs or a library |
 #   tick: short click (f1, f2, decay) | thump: low hit (f0, f1, decay) | notes: soft bell notes (notes, step, decay) | glide: tonal swell (f0, f1, dur)
 # Times: seconds, or relative to the voice so nothing drifts after re-voicing:
 #   "@word+0.2" (first word starting like that), "line:4-0.15" (start of line 4), "end" (end of the episode).
 # Ducking: pads go down by duck.db and music by duck.music_db wherever the voice is loud, with a smooth
-# 80-150 ms envelope (sidechain-like). Events (tick, thump, notes, glide) are short accents and are not ducked.
+# 80-150 ms envelope (sidechain-like). Effects get a ceiling instead: fx_db under the voice's speech level while it
+# speaks, fx_gap under it in pauses, so no ready-made SFX file can be louder than the narrator.
 # music.file: relative to the current folder or to the folder of cues.json; mp3/wav/ogg/m4a, anything ffmpeg reads.
 import json, os, re, subprocess, sys, wave
 import numpy as np
@@ -129,6 +130,20 @@ talk = np.clip(box(box(talk, sm), sm), 0, 1)  # smoothed twice: no pumping, no c
 db_pads, db_music = D.get('db', 7), D.get('music_db', D.get('db', 7) + 2)
 duck_pads = 10 ** (-db_pads * talk / 20) if duck_on else np.ones(N)
 duck_music = 10 ** (-db_music * talk / 20) if duck_on else np.ones(N)
+
+# sound effects never get louder than the narrator: a ceiling tied to the voice's speech level,
+# fx_db below it while speaking, fx_gap below it in pauses (ready-made SFX files arrive very loud)
+if duck_on and D.get('fx_db', 9) is not False:
+    speech = np.percentile(loud, 90) if len(loud) else -20.0
+    ceil_db = speech - (D.get('fx_gap', 5) + (D.get('fx_db', 9) - D.get('fx_gap', 5)) * talk)
+    fx_lvl = np.sqrt(box(fx ** 2, int(0.03 * SR)) + 1e-12)
+    g = np.minimum(1.0, 10 ** (ceil_db / 20) / fx_lvl)
+    g = np.minimum(g, box(g, int(0.04 * SR)))  # hold the reduction a little longer than the peak
+    g = box(g, int(0.02 * SR))                 # no clicks
+    over = 20 * np.log10(np.maximum(fx_lvl, 1e-9)) - ceil_db
+    print(f'fx ceiling: {D.get("fx_db", 9)} dB under the voice while speaking, {D.get("fx_gap", 5)} dB in pauses; '
+          f'loudest fx was {max(0.0, float(over.max())):.1f} dB over it, now reduced')
+    fx = fx * g
 
 bed = np.repeat((pads * duck_pads)[:, None], 2, axis=1) + fx[:, None]
 
