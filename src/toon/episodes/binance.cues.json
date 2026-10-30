@@ -388,63 +388,6 @@
    "file": "public/sfx/whoosh.opus",
    "t": "line:25-0.1",
    "gain": 0.35
-  },
-  {
-   "type": "sample",
-   "file": "public/sfx/n_roll.opus",
-   "t": 10.67,
-   "gain": 0.8,
-   "who": "nitka",
-   "dur": 0.6,
-   "fade": 0.1
-  },
-  {
-   "type": "sample",
-   "file": "public/sfx/n_land.opus",
-   "t": 11.02,
-   "gain": 0.5,
-   "who": "nitka"
-  },
-  {
-   "type": "sample",
-   "file": "public/sfx/n_roll.opus",
-   "t": 14.71,
-   "gain": 0.7,
-   "who": "nitka",
-   "dur": 0.6,
-   "fade": 0.1
-  },
-  {
-   "type": "sample",
-   "file": "public/sfx/n_roll.opus",
-   "t": 92.54,
-   "gain": 0.8,
-   "who": "nitka",
-   "dur": 0.6,
-   "fade": 0.1
-  },
-  {
-   "type": "sample",
-   "file": "public/sfx/n_land.opus",
-   "t": 92.89,
-   "gain": 0.5,
-   "who": "nitka"
-  },
-  {
-   "type": "sample",
-   "file": "public/sfx/n_roll.opus",
-   "t": 96.02,
-   "gain": 0.7,
-   "who": "nitka",
-   "dur": 0.6,
-   "fade": 0.1
-  },
-  {
-   "type": "sample",
-   "file": "public/sfx/n_twang.opus",
-   "t": 95.92,
-   "gain": 0.8,
-   "who": "nitka"
   }
  ],
  "music": [
