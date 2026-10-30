@@ -5,11 +5,14 @@
 import React from 'react';
 import {AbsoluteFill, Audio, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import voice from './binance.voice.json';
+import nitka from './binance.nitka.json';
+import nitkaMouth from './binance.nitka.mouth.json';
 import {CaseSubs, Desk, Paper, Push, SafeZones, Stamp, SAFE, C, MONO, MONT} from '../case/Kit';
 import {Grain, DataChip} from '../case/Hybrid';
 import {CommentBubble} from '../case/KurierSeries';
 import {M, Backdrop, Tag, BigNum, Vault, NoNeed, MoneyTower, Odometer, Stopwatch, Tunnel, Trucks, Weight, Laptop, Signatures, CoinStream, Network, Bars, Typo, Shield, Offer} from '../case/Heist';
 import {Icon} from '../ui/Icons';
+import {Nitka, act, Key, Emo, Arm, Emote} from '../rig/Nitka';
 import {clamp, easeInOut, easeOut, ramp, spring01, wobble} from '../lib/anim';
 
 export const HE_FPS = 30;
@@ -19,6 +22,43 @@ const W = (w: string, from = 0) => voice.lines.slice(from).flatMap((l) => l.word
   .find((x) => x.w.toLowerCase().replace(/[«»"$]/g, '').startsWith(w))!.t;
 const cut = (i: number) => L(i).start - 0.1;
 const END = L(25).end + 0.3;
+
+// «Нитка» (MASCOT.md) pops in four times: rolls in from the left in the gap made for her line, acts on her words, rolls out.
+// Each line: [word index, emotion, extras] keys; the first key is the take on her first word.
+const NL = nitka.lines;
+const NW = (i: number, k: number) => NL[i].words[k].t;
+const NKEYS: [number, Emo, {arm?: Arm; look?: [number, number]; emote?: Emote}?][][] = [
+  [[0, 'surprised', {look: [0.7, -0.4]}], [2, 'laugh', {arm: 'shrug'}]],
+  [[0, 'thinking', {arm: 'chin', look: [0.8, -0.5]}], [5, 'excited', {arm: 'point', look: [0.6, -0.3]}]],
+  [[0, 'surprised', {emote: '!', look: [0.6, -0.2]}], [2, 'proud', {arm: 'hips'}]],
+  [[0, 'happy', {arm: 'wave'}], [3, 'playful', {arm: 'tug'}]],
+];
+const NX = [240, 240, 240, 470], NFEET = 1330, NSC = 1.3;  // the sign-off takes the centre
+const NitkaInsert: React.FC<{t: number}> = ({t}) => {
+  const i = NL.findIndex((l) => t >= l.start - nitka.enter - 0.05 && t < l.end + nitka.exit + 0.1);
+  if (i < 0) return null;
+  const ln = NL[i], t0 = ln.start - nitka.enter, t1 = ln.end + 0.15;
+  const inK = easeOut((t - t0) / (nitka.enter - 0.05)), outK = easeInOut((t - t1) / (nitka.exit - 0.1));
+  const x = NX[i] - (NX[i] + 180) * (1 - inK) - (NX[i] + 280) * clamp(outK);
+  const rolling = t < t0 + nitka.enter - 0.08 || t > t1 ? 1 : 0;
+  const keys: Key[] = [[0, 'neutral'], ...NKEYS[i].map(([k, e, o]) => [NW(i, k) - 0.05, e, o] as Key)];
+  const st = act(t, keys);
+  const talk = rolling ? 0 : nitkaMouth.mouth[Math.min(nitkaMouth.mouth.length - 1, Math.max(0, Math.round(t * nitkaMouth.fps)))] ?? 0;
+  const spin = -540 * (1 - inK) - 600 * clamp(outK);
+  const hop = rolling ? -Math.abs(Math.sin(t * 10)) * 26 : 0;
+  return (
+    <AbsoluteFill style={{pointerEvents: 'none'}}>
+      <AbsoluteFill style={{background: `radial-gradient(ellipse 55% 40% at 20% 72%, rgba(7,11,20,${0.75 * inK * (1 - clamp(outK))}) 0%, rgba(7,11,20,0) 70%)`}} />
+      <svg width={1080} height={1920} style={{position: 'absolute'}}>
+        <Nitka t={t} x={x} y={NFEET + hop} s={NSC} st={st} talk={talk} roll={rolling} spin={spin} />
+      </svg>
+    </AbsoluteFill>
+  );
+};
+
+// narrator and mascot subtitles on one track; the mascot's lines get her red word box
+const SUBS = [...voice.lines.map((l, i) => ({...l, who: i})), ...NL.map((l) => ({...l, who: -1}))].sort((a, b) => a.start - b.start);
+const SUBS_END = Math.max(END, NL[NL.length - 1].end + 0.35);
 const TONE: ('white' | 'yellow' | 'red')[] = ['yellow', 'white', 'yellow', 'red', 'white', 'white', 'white', 'yellow', 'red', 'white', 'white', 'yellow', 'white',
   'red', 'white', 'red', 'white', 'yellow', 'white', 'white', 'yellow', 'white', 'yellow', 'white', 'yellow', 'yellow'];
 
@@ -188,6 +228,7 @@ export const BinanceHeist: React.FC<{audio?: boolean; safe?: boolean}> = ({audio
         </svg>
         <AbsoluteFill style={{background: 'rgba(7,11,20,0.55)'}} />
         <BigNum f={f} fps={fps} at={L(25).start} text="≈ $3,3 МЛРД" y={360} size={110} sub="НЕ ЗАМОРОЖЕНЫ" />
+        <div style={{position: 'absolute', inset: 0, opacity: 1 - ramp(t, NL[3].start - 1.0, NL[3].start - 0.45)}}>
         <CommentBubble f={f} fps={fps} at={L(25).start + 0.5} text="Думаю, найдут, потому что…" x={SAFE.left + 20} y={760} />
         {(() => {
           const p = spring01(f, (L(25).start + 1.4) * fps, fps, 2, 0.5), flip = clamp((t - L(25).start - 2.6) / 0.25);
@@ -197,10 +238,12 @@ export const BinanceHeist: React.FC<{audio?: boolean; safe?: boolean}> = ({audio
               transform: `rotate(${flip >= 0.5 ? wobble(f * 0.6, 1) * 14 : 0}deg)`}}><Icon name="bell" size={44} color="#fff" /></div>
           </div> : null;
         })()}
+        </div>
       </Cut>
 
+      <NitkaInsert t={t} />
       <Grain f={f} k={0.06} />
-      {t < END && <CaseSubs lines={voice.lines} f={f} fps={fps} total={voice.total} tone={(i) => TONE[i] ?? 'white'} />}
+      {t < SUBS_END && <CaseSubs lines={SUBS} f={f} fps={fps} total={voice.total} tone={(i) => SUBS[i].who < 0 ? 'red' : TONE[SUBS[i].who] ?? 'white'} />}
       {safe && <SafeZones />}
     </AbsoluteFill>
   );

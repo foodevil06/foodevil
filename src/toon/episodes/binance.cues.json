@@ -388,6 +388,141 @@
    "file": "public/sfx/whoosh.opus",
    "t": "line:25-0.1",
    "gain": 0.35
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 10.73,
+   "gain": 0.9,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_land.opus",
+   "t": 11.15,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 11.9,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 13.87,
+   "gain": 0.8,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 48.8,
+   "gain": 0.9,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_land.opus",
+   "t": 49.22,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 51.15,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 52.14,
+   "gain": 0.8,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 68.69,
+   "gain": 0.9,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_land.opus",
+   "t": 69.11,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 70.06,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 71.69,
+   "gain": 0.8,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 98.96,
+   "gain": 0.9,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_land.opus",
+   "t": 99.38,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 99.97,
+   "gain": 0.6,
+   "who": "nitka"
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 101.22,
+   "gain": 0.8,
+   "who": "nitka",
+   "dur": 0.6,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_twang.opus",
+   "t": 100.02,
+   "gain": 0.9,
+   "who": "nitka"
   }
  ],
  "music": [
