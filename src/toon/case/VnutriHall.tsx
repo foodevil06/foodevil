@@ -19,16 +19,20 @@ export const LowKey: React.FC<{x?: number; y?: number; r?: number; k?: number}> 
 // ---------- the hero, front view (also the double and the reflection) ----------
 // neck at (x, y); phone: 'ear' (held to the right ear, lights that side of the face), 'chest' (held low, lights the face
 // from below), 'none'. smile 0..1 is the reflection's grin, talk 0..1 opens the lips, look -1..1 turns the face a little.
-export type PersonSpec = {id: string; x: number; y: number; s?: number; phone?: 'ear' | 'chest' | 'none'; glow?: number; smile?: number; talk?: number; look?: number; full?: boolean};
-export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', glow = 1, smile = 0, talk = 0, look = 0, full = false}) => {
+// smirk 0..1 a closed-mouth smile (the double), glint 0..1 an unnatural shine in the eyes, age 0..1 the old one from the
+// wardrobe (grey hair, lines, bags under sunken eyes)
+export type PersonSpec = {id: string; x: number; y: number; s?: number; phone?: 'ear' | 'chest' | 'none'; glow?: number; smile?: number; talk?: number; look?: number; full?: boolean;
+  smirk?: number; glint?: number; age?: number};
+export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', glow = 1, smile = 0, talk = 0, look = 0, full = false, smirk = 0, glint = 0, age = 0}) => {
   const lx = look * 14;
   // low-key: the screen lights only the cheek by the ear, or only the chin and the underside of the nose from below
   const light = phone === 'ear' ? {cx: 140, cy: -105, r: 125} : phone === 'chest' ? {cx: 0, cy: 0, r: 118} : {cx: 0, cy: -300, r: 10};
-  const eyeLit = phone === 'chest' ? 0.22 : 0.35 + 0.65 * glow;
+  const eyeLit = Math.min(1, (phone === 'chest' ? 0.22 : 0.35 + 0.65 * glow) + glint);
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
       <defs>
         <clipPath id={`${id}-face`}><ellipse cx={0} cy={-120} rx={82} ry={104} /></clipPath>
+        <radialGradient id={`${id}-up`}><stop offset="0" stopColor={LIT} stopOpacity={0.3 * glow} /><stop offset="1" stopColor={LIT} stopOpacity="0" /></radialGradient>
         <radialGradient id={`${id}-lit`} cx={light.cx} cy={light.cy} r={light.r} gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor={LIT} stopOpacity={0.95 * glow} /><stop offset="1" stopColor={LIT} stopOpacity="0" />
         </radialGradient>
@@ -54,15 +58,22 @@ export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', g
       <rect x={-40} y={-40} width={80} height={60} fill={SKIN} />
       <ellipse cx={0} cy={-120} rx={82} ry={104} fill={SKIN} />
       <g clipPath={`url(#${id}-face)`}><rect x={-100} y={-240} width={200} height={260} fill={`url(#${id}-lit)`} /></g>
-      <path d="M -86 -118 C -92 -238 92 -238 86 -118 C 74 -170 30 -186 -10 -176 C -40 -170 -70 -160 -86 -118 Z" fill={HAIR} />
+      <path d="M -86 -118 C -92 -238 92 -238 86 -118 C 74 -170 30 -186 -10 -176 C -40 -170 -70 -160 -86 -118 Z" fill={age > 0.5 ? '#7c8086' : HAIR} />
+      {age > 0 && <g opacity={age} stroke="#121316" fill="none" strokeLinecap="round">
+        {[-178, -166].map((yy, i) => <path key={i} d={`M -46 ${yy} Q 0 ${yy - 8} 46 ${yy}`} strokeWidth={2.5} />)}
+        {[-1, 1].map((k) => <g key={k}><path d={`M ${k * 16} -112 Q ${k * 30} -104 ${k * 44} -114`} strokeWidth={4} opacity={0.8} />
+          <path d={`M ${k * 24} -86 Q ${k * 36} -70 ${k * 30} -54`} strokeWidth={3} />
+          <ellipse cx={k * 30} cy={-128} rx={24} ry={17} fill="#000" stroke="none" opacity={0.55} />
+          <path d={`M ${k * 58} -110 Q ${k * 50} -80 ${k * 56} -50`} strokeWidth={9} opacity={0.35} /></g>)}
+      </g>}
       <g transform={`translate(${lx} 0)`}>
         {[-1, 1].map((k) => <g key={k}>
           <path d={`M ${k * 30 - 16} -152 Q ${k * 30} ${-158} ${k * 30 + 16} -151`} stroke="#0c0d10" strokeWidth={5} fill="none" strokeLinecap="round" />
           <ellipse cx={k * 30} cy={-128} rx={11} ry={6} fill="#0a0b0d" />
-          <circle cx={k * 30 + 3} cy={-130} r={2.4} fill="#dfe8f5" opacity={eyeLit} />
+          <circle cx={k * 30 + 3} cy={-130} r={2.4 + 2.6 * glint} fill="#eef4ff" opacity={eyeLit} />
         </g>)}
         <path d="M -2 -120 L 8 -92 L -6 -88" stroke="#16181c" strokeWidth={3.5} fill="none" strokeLinecap="round" opacity={0.7} />
-        <path d="M -22 -64 Q 0 -61 22 -64" stroke="#141518" strokeWidth={4} fill="none" strokeLinecap="round" opacity={1 - smile} />
+        <path d={`M -24 ${-64 - 7 * smirk} Q 0 ${-61 + 7 * smirk} 24 ${-64 - 7 * smirk}`} stroke="#141518" strokeWidth={4} fill="none" strokeLinecap="round" opacity={1 - smile} />
         {talk > 0 && smile < 0.5 && <ellipse cx={0} cy={-62} rx={14} ry={2 + 7 * talk} fill="#08090a" />}
         {smile > 0 && <g opacity={smile}>
           <path d="M -46 -76 Q 0 -26 46 -76 Q 0 -50 -46 -76 Z" fill="#d6d2c8" stroke="#0a0b0c" strokeWidth={3} />
@@ -77,7 +88,7 @@ export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', g
       </g>}
       {phone === 'chest' && <g transform="translate(0 255)">
         <rect x={-48} y={-90} width={96} height={180} rx={14} fill="#050608" />
-        <ellipse cx={0} cy={-100} rx={110} ry={40} fill={LIT} opacity={0.22 * glow} />
+        <ellipse cx={0} cy={-100} rx={120} ry={60} fill={`url(#${id}-up)`} />
         {[-1, 1].map((k) => <ellipse key={k} cx={k * 52} cy={20} rx={26} ry={34} fill={SKIN} />)}
       </g>}
     </g>
@@ -87,11 +98,13 @@ export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', g
 // the hero from behind (over-the-shoulder shots); turn 0..1 shows the edge of his face
 export const Back: React.FC<{x: number; y: number; s?: number; phone?: boolean; glow?: number; turn?: number}> = ({x, y, s = 1, phone = true, glow = 1, turn = 0}) => (
   <g transform={`translate(${x} ${y}) scale(${s})`}>
-    <path d="M -210 600 L -215 140 C -205 50 -120 10 -60 0 L 60 0 C 120 10 205 50 215 140 L 210 600 Z" fill={HOOD} stroke="#3b4351" strokeWidth={6} />
+    <path d="M -210 600 L -215 140 C -205 50 -120 10 -60 0 L 60 0 C 120 10 205 50 215 140 L 210 600 Z" fill={HOOD} />
+    <path d="M 60 0 C 120 10 205 50 215 140 L 210 600" fill="none" stroke="#3d4654" strokeWidth={7} />
     <path d="M -120 20 C -110 110 110 110 120 20 C 80 -10 -80 -10 -120 20 Z" fill={HOOD2} />
     <path d="M -190 90 C -235 250 -235 420 -220 600" stroke={HOOD} strokeWidth={80} fill="none" strokeLinecap="round" />
     {phone && <path d="M 190 90 C 250 230 250 330 230 340 C 200 300 150 150 110 -80" stroke={HOOD} strokeWidth={78} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-    <ellipse cx={0} cy={-120} rx={84} ry={104} fill={HAIR} stroke="#353c48" strokeWidth={5} />
+    <ellipse cx={0} cy={-120} rx={84} ry={104} fill={HAIR} />
+    <path d="M 30 -220 C 80 -200 92 -150 84 -100" fill="none" stroke="#353c48" strokeWidth={6} strokeLinecap="round" />
     {turn > 0 && <path d={`M ${84 - 50 * turn} -60 C ${96 - 30 * turn} -100 ${96 - 30 * turn} -150 ${80 - 40 * turn} -190 L 70 -190 L 70 -40 Z`} fill={SKIN} opacity={clamp(turn * 1.5)} />}
     <ellipse cx={-84} cy={-118} rx={12} ry={22} fill="#1a1c20" />
     {phone && <>
@@ -179,7 +192,9 @@ export const CallContent: React.FC<{s: number; t: number; markAt: number; accept
 };
 
 // ---------- medium shot in the hallway: the hero between the door and the phone; orbit -1..1 circles him ----------
-export const HallStage: React.FC<{t: number; orbit: number; person: Omit<PersonSpec, 'x' | 'y' | 'id'>; door?: number}> = ({t, orbit, person, door = 0}) => {
+// second: another figure in front of him (the double coming close), in screen space, moving with the orbit
+export const HallStage: React.FC<{t: number; orbit: number; person: Omit<PersonSpec, 'x' | 'y' | 'id'>; door?: number; second?: Omit<PersonSpec, 'id'>}> =
+  ({t, orbit, person, door = 0, second}) => {
   const bx = -orbit * 240, px = orbit * 50;
   return (
     <AbsoluteFill>
@@ -196,6 +211,7 @@ export const HallStage: React.FC<{t: number; orbit: number; person: Omit<PersonS
           <rect x={740} y={1494} width={320} height={8} fill="#cfd8e6" opacity={0.5} />
         </g>
         <Person id="hall" x={540 + px} y={830} s={1.32} look={-orbit * 0.5} {...person} />
+        {second && <Person id="hall2" {...second} x={second.x + px * 1.6} />}
       </svg>
       <LowKey x={600} y={720} r={62} k={0.9} />
     </AbsoluteFill>
@@ -271,7 +287,8 @@ export const Doormat: React.FC<{t: number; lift: number; glint: number; take?: n
 };
 
 // ---------- you turn around: the dark flat behind you, and him ----------
-export const Behind: React.FC<{t: number; figure: number; talk?: number; breathe?: number; smile?: number}> = ({t, figure, talk = 0, breathe = 0}) => {
+export const Behind: React.FC<{t: number; figure: number; talk?: number; breathe?: number; smile?: number; person?: Partial<PersonSpec>; floorPhone?: number}> =
+  ({t, figure, talk = 0, breathe = 0, person = {}, floorPhone = 0}) => {
   const cx = 540, vy = 820, b = Math.sin(t * 2.2) * 4 * breathe;
   return (
     <AbsoluteFill>
@@ -288,8 +305,13 @@ export const Behind: React.FC<{t: number; figure: number; talk?: number; breathe
         {/* the wardrobe, now on the right wall */}
         <path d={`M 1340 120 L ${cx + 260} ${vy - 250} L ${cx + 260} ${vy + 280} L 1340 1700 Z`} fill="#14171c" />
         <path d={`M 1230 260 L ${cx + 300} ${vy - 200} L ${cx + 300} ${vy + 240} L 1230 1560 Z`} fill="#20252d" />
+        {floorPhone > 0 && <g opacity={floorPhone}>
+          <ellipse cx={cx + 40} cy={1480} rx={220} ry={60} fill="#8fb4ff" opacity={0.1} />
+          <path d={`M ${cx - 30} 1500 L ${cx + 70} 1470 L ${cx + 130} 1490 L ${cx + 30} 1522 Z`} fill="#0a0c10" stroke="#2a2f38" strokeWidth={3} />
+          <path d={`M ${cx - 18} 1499 L ${cx + 68} 1474 L ${cx + 118} 1490 L ${cx + 30} 1516 Z`} fill="#b9c8e0" opacity={0.75} />
+        </g>}
         {figure > 0 && <g opacity={figure} transform={`translate(0 ${b})`}>
-          <Person id="dbl" x={cx} y={830} s={0.74} phone="chest" glow={1} talk={talk} full />
+          <Person id="dbl" x={cx} y={830} s={0.74} phone="chest" glow={1} talk={talk} full {...person} />
         </g>}
       </svg>
       <LowKey x={540} y={760} r={64} k={0.9} />
@@ -298,8 +320,8 @@ export const Behind: React.FC<{t: number; figure: number; talk?: number; breathe
 };
 
 // ---------- your phone on the floor, screen up: «ДОСТАВКА ЗАВЕРШЕНА» ----------
-export const FloorPhone: React.FC<{t: number; at: number}> = ({t, at}) => {
-  const k = easeOut((t - at) / 0.3);
+export const FloorPhone: React.FC<{t: number; at: number; next?: {at: number; title: string}}> = ({t, at, next}) => {
+  const k = easeOut((t - at) / 0.3), n = next ? easeOut((t - next.at) / 0.3) : 0;
   return (
     <AbsoluteFill>
       <svg width={1080} height={1920} style={{position: 'absolute'}}>
@@ -310,8 +332,12 @@ export const FloorPhone: React.FC<{t: number; at: number}> = ({t, at}) => {
       </svg>
       <Phone x={SAFE.cx} y={800} w={430} rot={11}>
         <div style={{position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 40%, #1b2333 0, #0a0d14 75%)', fontFamily: UI, textAlign: 'center'}}>
-          <div style={{position: 'absolute', left: 16, right: 16, top: 60}}><Notif k={k} title="Доставка завершена" icon="check" scale={430 / 400} /></div>
-          <div style={{position: 'absolute', left: 0, right: 0, top: 380, opacity: k}}>
+          <div style={{position: 'absolute', left: 16, right: 16, top: 60, display: 'flex', flexDirection: 'column', gap: 10}}>
+            {next && <Notif k={n} title={next.title} red scale={430 / 400} />}
+            <Notif k={k} title="Доставка завершена" icon="check" scale={430 / 400} /></div>
+          {next && n > 0 && <div style={{position: 'absolute', left: 0, right: 0, top: 420, opacity: n, fontFamily: MONT, fontWeight: 900, fontSize: 40, color: V.red, lineHeight: 1.12,
+            textShadow: '0 0 24px rgba(226,59,59,0.5)'}}>СЛЕДУЮЩАЯ<br />ДОСТАВКА<br />НАЗНАЧЕНА</div>}
+          <div style={{position: 'absolute', left: 0, right: 0, top: 380, opacity: k * (1 - n)}}>
             <div style={{width: 90, height: 90, margin: '0 auto 26px', borderRadius: '50%', border: '5px solid #e8ecf2', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
               <Icon name="check" size={56} color="#e8ecf2" stroke={2.6} /></div>
             <div style={{fontFamily: MONT, fontWeight: 900, fontSize: 44, color: '#e8ecf2', lineHeight: 1.1, letterSpacing: 1}}>ДОСТАВКА<br />ЗАВЕРШЕНА</div>
