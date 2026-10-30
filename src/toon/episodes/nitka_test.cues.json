@@ -1,0 +1,97 @@
+{
+ "total": 7.6,
+ "pads": [
+  {
+   "t0": 0,
+   "t1": 7.6,
+   "notes": [
+    220,
+    277.2,
+    329.6
+   ],
+   "gain": 0.035,
+   "attack": 0.6,
+   "release": 0.8
+  }
+ ],
+ "events": [
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 0.0,
+   "gain": 1.0,
+   "dur": 0.8,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_land.opus",
+   "t": 0.72,
+   "gain": 1.0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 0.9,
+   "gain": 0.8
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 1.94,
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 2.55,
+   "gain": 0.4
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 4.11,
+   "gain": 0.7
+  },
+  {
+   "type": "notes",
+   "t": 4.16,
+   "notes": [
+    880,
+    1175
+   ],
+   "gain": 0.06,
+   "step": 0.09
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_twang.opus",
+   "t": 5.14,
+   "gain": 1.0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_pop.opus",
+   "t": 5.62,
+   "gain": 0.7
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_roll.opus",
+   "t": 6.57,
+   "gain": 1.0,
+   "dur": 0.8,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/n_whip.opus",
+   "t": 6.87,
+   "gain": 0.6
+  }
+ ],
+ "duck": {
+  "db": 6,
+  "music_db": 9
+ }
+}
