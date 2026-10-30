@@ -24,3 +24,4 @@ _tmp/binance/*.wav
 _tmp/binance/*.log
 _tmp/binance/*.tsv
 public/binance/
+_tmp/mascot/

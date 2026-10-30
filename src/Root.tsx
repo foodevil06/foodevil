@@ -8,6 +8,7 @@ import {StyleFrames} from './toon/episodes/StyleFrames';
 import {Kurier, KU_FPS, KU_SEC} from './toon/episodes/Kurier';
 import {Kurier2, K2_FPS, K2_SEC} from './toon/episodes/Kurier2';
 import {BinanceHeist, HE_FPS, HE_SEC} from './toon/episodes/BinanceHeist';
+import {MascotConcepts} from './toon/episodes/MascotConcepts';
 import {StickExample, StickPoses, InfoCards, SX_FPS, SX_SEC} from './toon/episodes/StickExample';
 
 export const Root: React.FC = () => (
@@ -28,5 +29,6 @@ export const Root: React.FC = () => (
     <Composition id="Kurier2Safe" component={Kurier2} width={1080} height={1920} fps={K2_FPS} durationInFrames={Math.round(K2_SEC * K2_FPS)} defaultProps={{audio: false, safe: true}} />
     <Composition id="BinanceHeist" component={BinanceHeist} width={1080} height={1920} fps={HE_FPS} durationInFrames={Math.round(HE_SEC * HE_FPS)} defaultProps={{audio: true}} />
     <Composition id="BinanceHeistSafe" component={BinanceHeist} width={1080} height={1920} fps={HE_FPS} durationInFrames={Math.round(HE_SEC * HE_FPS)} defaultProps={{audio: false, safe: true}} />
+    <Composition id="MascotConcepts" component={MascotConcepts} width={1080} height={1920} fps={30} durationInFrames={120} />
   </>
 );
