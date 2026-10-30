@@ -18,3 +18,9 @@ _tmp/icons/
 _tmp/npm.log
 public/kurier2/
 _tmp/refs2/
+_tmp/binance/*/
+_tmp/binance/*.png
+_tmp/binance/*.wav
+_tmp/binance/*.log
+_tmp/binance/*.tsv
+public/binance/
