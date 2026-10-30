@@ -23,7 +23,7 @@ const TONE: ('white' | 'yellow' | 'red')[] = ['yellow', 'white', 'yellow', 'red'
   'red', 'white', 'red', 'white', 'yellow', 'white', 'white', 'yellow', 'white', 'yellow', 'white', 'yellow', 'yellow'];
 
 const Cut: React.FC<{t: number; from: number; to: number; children: React.ReactNode}> = ({t, from, to, children}) =>
-  t >= from && t < to ? <AbsoluteFill style={{opacity: easeOut((t - from) / 0.12)}}>{children}</AbsoluteFill> : null;
+  t >= from && t < to ? <AbsoluteFill style={{opacity: from <= 0 ? 1 : easeOut((t - from) / 0.12)}}>{children}</AbsoluteFill> : null;  // frame 0 is the cover: no fade-in
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 

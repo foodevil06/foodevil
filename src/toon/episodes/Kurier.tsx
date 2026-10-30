@@ -34,7 +34,7 @@ const COURIER: Msg[] = [
 ];
 
 const Cut: React.FC<{t: number; from: number; to: number; children: React.ReactNode}> = ({t, from, to, children}) =>
-  t >= from && t < to ? <AbsoluteFill style={{opacity: easeOut((t - from) / 0.12)}}>{children}</AbsoluteFill> : null;
+  t >= from && t < to ? <AbsoluteFill style={{opacity: from <= 0 ? 1 : easeOut((t - from) / 0.12)}}>{children}</AbsoluteFill> : null;  // frame 0 is the cover: no fade-in
 
 export const Kurier: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = false, safe = false}) => {
   const f = useCurrentFrame();

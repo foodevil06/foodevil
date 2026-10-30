@@ -45,7 +45,7 @@ const RUN1: [number, number][] = [[cut(1), 9.75], [W('9-й', 2), 9.05], [W('8-й
 const RUN2: [number, number][] = [[cut(4), 6.3], [cut(4) + 0.6, 5.05], [cut(4) + 1.1, 4.05], [cut(4) + 1.6, 3.05], [cut(4) + 2.1, 2.05], [cut(5), 1.4]];
 
 const Cut: React.FC<{t: number; from: number; to: number; children: React.ReactNode}> = ({t, from, to, children}) =>
-  t >= from && t < to ? <AbsoluteFill style={{opacity: easeOut((t - from) / 0.12)}}>{children}</AbsoluteFill> : null;
+  t >= from && t < to ? <AbsoluteFill style={{opacity: from <= 0 ? 1 : easeOut((t - from) / 0.12)}}>{children}</AbsoluteFill> : null;  // frame 0 is the cover: no fade-in
 
 // 3D stairwell shot + 2D glow, speed lines and HUD on top
 const Stairs: React.FC<{t: number; f: number; fps: number; knots: [number, number][]; alarm: number; t0: number}> = ({t, f, fps, knots, alarm, t0}) => {

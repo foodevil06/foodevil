@@ -53,7 +53,7 @@ export const Vault: React.FC<{t: number; open: number; spin?: number}> = ({t, op
       <circle cx={cx} cy={cy} r={R + 30} fill="#0a0e18" />
       <circle cx={cx} cy={cy} r={R} fill="url(#vt-l)" />
       {Array.from({length: 7}, (_, i) => <rect key={i} x={cx - 160 + i * 50} y={cy + 80} width={40} height={140 - (i % 3) * 30} fill={M.gold} opacity={open} />)}
-      <g transform={`translate(${cx - R * 0.9 * open} 0) translate(${cx} ${cy}) scale(${1 - 0.75 * open} 1) translate(${-cx} ${-cy})`}>
+      <g transform={`translate(${R * 0.9 * open} 0) translate(${cx} ${cy}) scale(${1 - 0.75 * open} 1) translate(${-cx} ${-cy})`}>
         <circle cx={cx} cy={cy} r={R} fill="url(#vt-d)" />
         <circle cx={cx} cy={cy} r={R - 40} fill="none" stroke="#45536a" strokeWidth={10} />
         {Array.from({length: 12}, (_, i) => { const a = (i / 12) * Math.PI * 2; return <circle key={i} cx={cx + Math.cos(a) * (R - 20)} cy={cy + Math.sin(a) * (R - 20)} r={12} fill="#3d4a5e" />; })}

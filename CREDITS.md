@@ -7,3 +7,10 @@
 | Звуки `public/sfx/k2_*.opus`, музыка `public/music/kurier_tension.mp3` | сгенерированы ElevenLabs (SFX, Music) через Lumean | по условиям ElevenLabs для платных генераций |
 | Голос «Курьер 2» | ElevenLabs, голос HcaxAsrhw4ByUo4CBCBN, через Lumean | по условиям ElevenLabs |
 | Шрифты Montserrat, PT Mono, Inter, Caveat | Google Fonts | OFL |
+| Скиллы в `.claude/skills/`: short-form-video, caption-animation, countdown-video, lower-thirds | github.com/iart-ai/tiktok-video-skills | MIT (iart.ai) |
+| Скиллы: animation-principles, motion-art-direction, shot-composition, color-motion, beat-sync-editing, remotion-video, motion-background, logo-animation | github.com/iart-ai/motion-design-skills | MIT (iart.ai) |
+| Скиллы: vox-explainer, motion-effects, reference-to-motion, motion-brief-writer, motion-prompt-writer, animated-chart, reel-export, title-sequence-3d, brand-intake | github.com/charlie947/motion-graphics-skills | MIT |
+| Скилл lottie-motion-design | github.com/LottieFiles/motion-design-skill | MIT (LottieFiles) |
+| Скилл howseen-motion-design (без mcp21_client.py) | github.com/howseen-ai/claude-motion-design | MIT |
+| Скиллы character-consistency, video-prompt-director | github.com/nigo-studio/ai-film-skills | MIT |
+| Скилл cartoon-acting (руководство и лист эмоций) | github.com/JohnHeibel/ClaudeAnimationBase | MIT (John Heibel) |
