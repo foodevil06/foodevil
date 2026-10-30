@@ -66,7 +66,7 @@ export const NitkaTest: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = 
   const reachP = ramp(t, W(1, 0) - 0.05, W(1, 3) + 0.15, easeInOut);
   const taut = ramp(t, W(2, 2) - 0.05, W(2, 2) + 0.2);
   const tug = t > W(2, 2) ? Math.sin((t - W(2, 2)) * 14) * Math.exp(-3 * (t - W(2, 2))) : 0;
-  const litB = clamp(reachP * 3 - 1.4), litA = clamp(reachP * 3 - 2.2);  // the thread reaches the card first, then the polaroid
+  const litB = clamp(reachP * 2.2 - 1), litA = clamp(reachP * 2.2 - 1.6);  // the thread reaches the card first, then the polaroid
   const iris = clamp((t - END) / 0.4);
   return (
     <AbsoluteFill style={{background: '#0d0805'}}>
@@ -74,7 +74,7 @@ export const NitkaTest: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = 
       <Board t={t} f={f} fps={fps} litA={litA} litB={litB} swing={tug} />
       <svg width={1080} height={1920} style={{position: 'absolute'}}>
         <Nitka t={t} x={x} y={FEET + hop} s={SC} st={st} talk={rolling ? 0 : talk} roll={rolling} spin={spin}
-          reach={reachP > 0 ? {pts: [[600, 760], PIN_B, PIN_A], p: reachP, taut, pinFrom: 1} : null} />
+          reach={reachP > 0 ? {pts: [PIN_B, PIN_A], p: reachP, taut, fade: 1 - ramp(t, OUT_AT - 0.2, OUT_AT + 0.3)} : null} />
       </svg>
       {iris > 0 && <AbsoluteFill style={{background: `radial-gradient(circle at 520px 700px, rgba(0,0,0,0) ${Math.max(0, 900 * (1 - iris))}px, #050302 ${Math.max(1, 900 * (1 - iris) + 4)}px)`}} />}
       <Grain f={f} k={0.05} />

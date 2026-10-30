@@ -23,15 +23,15 @@ export const EMO: Record<Emo, Def> = {
   excited: {eyes: ['wide', 'wide'], brow: [-14, 0], mouth: 'grin', blush: 0.8, emote: 'spark', take: 1, idle: (t) => I(-A(S(t * 6)) * 22, A(S(t * 6)) * 0.05, S(t * 3) * 5)},
   laugh: {eyes: ['closed', 'closed'], brow: [-8, 0], mouth: 'grin', blush: 0.8, emote: null, take: 0.8, idle: (t) => I(-A(S(t * 9)) * 8, A(S(t * 9)) * 0.04, S(t * 9) * 4)},
   proud: {eyes: ['closed', 'closed'], brow: [-6, 0], mouth: 'smile', blush: 0.6, emote: 'spark', take: 0.5, idle: (t) => I(S(t * 1.6) * 3, 0.03, -4 + S(t * 1.6))},
-  playful: {eyes: ['happy', 'normal'], brow: [-6, 0, -8], mouth: 'smirk', blush: 0.6, emote: null, take: 0.6, idle: (t) => I(-A(S(t * 3)) * 8, A(S(t * 3)) * 0.03, S(t * 3) * 7)},
+  playful: {eyes: ['normal', 'normal'], brow: [-6, 0, -8], mouth: 'smirk', blush: 0.6, emote: null, take: 0.6, idle: (t) => I(-A(S(t * 3)) * 8, A(S(t * 3)) * 0.03, S(t * 3) * 7)},
   smug: {eyes: ['narrow', 'narrow'], brow: [0, 6, -10], mouth: 'smirk', blush: 0.4, emote: null, take: 0.4, idle: (t) => I(S(t * 1.2) * 2, 0.01, -5 + S(t * 1.2) * 1.5)},
   mischief: {eyes: ['narrow', 'narrow'], brow: [-4, 10], mouth: 'grin', blush: 0.5, emote: null, take: 0.5, idle: (t) => I(S(t * 2) * 2, 0, 6 + S(t * 2) * 2, S(t * 2) * 4)},
-  suspicious: {eyes: ['narrow', 'normal'], brow: [2, 4, -12], mouth: 'flat', blush: 0.2, emote: 'dots', take: 0.4, idle: (t) => I(0, 0, 4, S(t * 0.8) * 6)},
+  suspicious: {eyes: ['narrow', 'narrow'], brow: [2, 4, -12], mouth: 'flat', blush: 0.2, emote: 'dots', take: 0.4, idle: (t) => I(0, 0, 4, S(t * 0.8) * 6)},
   sad: {eyes: ['sad', 'sad'], brow: [-4, -12], mouth: 'frown', blush: 0.1, emote: null, take: 0.4, idle: (t) => I(8 + S(t) * 2, -0.04, -2)},
   scared: {eyes: ['wide', 'wide'], brow: [-16, -10], mouth: 'wobble', blush: 0, emote: 'sweat', take: 1, idle: (t) => I(S(t * 37) * 2, -0.03, 0, S(t * 40) * 2.5)},
   nervous: {eyes: ['normal', 'normal'], brow: [-8, -8], mouth: 'wobble', blush: 0.2, emote: 'sweat', take: 0.5, idle: (t) => I(0, 0, S(t * 1.5) * 2, S(t * 25) * 1.5)},
   surprised: {eyes: ['wide', 'wide'], brow: [-18, 0], mouth: 'o', blush: 0.2, emote: '!', take: 1.1, idle: (t) => I(-6, 0.05, 0, S(t * 30) * 0.8)},
-  confused: {eyes: ['normal', 'narrow'], brow: [-6, 0, -14], mouth: 'wobble', blush: 0.2, emote: '?', take: 0.6, idle: (t) => I(0, 0, S(t * 1.4) * 8)},
+  confused: {eyes: ['normal', 'normal'], brow: [-6, 0, -14], mouth: 'wobble', blush: 0.2, emote: '?', take: 0.6, idle: (t) => I(0, 0, S(t * 1.4) * 8)},
   thinking: {eyes: ['normal', 'normal'], brow: [-4, 5, -8], mouth: 'flat', blush: 0.2, emote: 'dots', take: 0.4, idle: (t) => I(S(t) * 2, 0, -6 + S(t * 0.8) * 2), look: [-0.6, -0.7]},
   idea: {eyes: ['spark', 'spark'], brow: [-14, 0], mouth: 'grin', blush: 0.6, emote: 'bulb', take: 1, idle: (t) => I(-A(S(t * 5)) * 12, 0.03, S(t * 2.5) * 3)},
   determined: {eyes: ['angry', 'angry'], brow: [2, 12], mouth: 'flat', blush: 0.3, emote: null, take: 0.7, idle: (t) => I(S(t * 3) * 2, -0.02, 3)},
@@ -52,7 +52,7 @@ export const act = (t: number, keys: Key[]): ActState => {
   // squint closes the eyes just before the next key (anticipation) and opens right after this one
   const pre = next ? clamp((t - (next[0] - ANT)) / ANT) : 0;
   const post = k > 0 ? 1 - clamp(dt / 0.12) : 0;
-  const squint = Math.max(pre, post) * 0.85;
+  const squint = Math.max(pre, post) * 0.3;  // a light squint only: the eyes stay open
   const take = k > 0 ? def.take * S(Math.min(dt * 13, Math.PI)) * Math.exp(-3.2 * dt) - pre * 0.35 * (next ? EMO[next[1]].take : 0) : 0;
   return {emo, squint, take, emoteK: clamp(spring01(dt * 30, 0, 30, 2.4, 0.45)), emoteAge: dt, look: over?.look ?? def.look ?? [0, 0],
     arm: over?.arm ?? 'idle', armAt: kt, emote: over?.emote !== undefined ? over.emote : def.emote};
@@ -73,10 +73,10 @@ export const blink = (t: number, seed = 7) => {
 const RED = '#e23b3b', RED_D = '#a8232a', RED_L = '#ff7a72', INK = '#16181f', EYE = '#fbfbf7';
 
 const EyeG: React.FC<{x: number; y: number; shape: Eye; open: number; look: [number, number]}> = ({x, y, shape, open, look}) => {
-  const rx = 30, ry = shape === 'wide' ? 44 : 38;
+  const rx = 33, ry = shape === 'wide' ? 47 : 42;
   if (shape === 'happy') return <path d={`M ${x - 24} ${y + 8} Q ${x} ${y - 22} ${x + 24} ${y + 8}`} stroke={INK} strokeWidth={9} fill="none" strokeLinecap="round" />;
   if (shape === 'closed' || open < 0.08) return <path d={`M ${x - 24} ${y + 2} Q ${x} ${y + 16} ${x + 24} ${y + 2}`} stroke={INK} strokeWidth={8} fill="none" strokeLinecap="round" />;
-  const o = open * (shape === 'narrow' ? 0.5 : shape === 'angry' ? 0.65 : 1);
+  const o = open * (shape === 'narrow' ? 0.8 : shape === 'angry' ? 0.85 : 1);
   const pr = shape === 'wide' ? 0.3 : 0.45;
   const px = x + look[0] * rx * 0.38, py = y + look[1] * ry * 0.32 + (shape === 'sad' ? 8 : 0);
   // the lid: straight for narrow, slanted for sad (inner high) and angry (inner low)
@@ -144,7 +144,7 @@ export type NitkaProps = {
   st: ActState; talk?: number;
   roll?: number;             // 0 = standing; while rolling the ball spins and the eyes are shut
   spin?: number;             // spin angle of the yarn pattern, degrees
-  reach?: {pts: [number, number][]; p: number; taut?: number; pinFrom?: number} | null;  // the loose thread goes through these points (world coords); pins from index pinFrom
+  reach?: {pts: [number, number][]; p: number; taut?: number; pinFrom?: number; fade?: number} | null;  // the loose thread goes through these points (world coords); pins from index pinFrom
   flip?: boolean;
 };
 
@@ -175,12 +175,11 @@ export const Nitka: React.FC<NitkaProps> = ({t, x, y, s = 1, st, talk = 0, roll 
   // hat: follows the body late, pops off on big takes
   const hatRot = -8 + lag.rot * 0.7 - tk * 10;
   const hatY = cy - 120 * sy - Math.max(0, tk) * 46;
-  // the loose thread from the right side; world-space target points are converted to rig space
-  const tail0: [number, number] = [112, cy + 62];
+  // the thread comes out of the right hand only when she reaches for clues; world-space points -> rig space
   const toLocal = ([wx, wy]: [number, number]): [number, number] => [((wx - x) / s) * (flip ? -1 : 1), (wy - y) / s];
-  let tailD = `M ${tail0[0]} ${tail0[1]} C 190 ${cy + 122} 170 -20 260 -14 S 360 ${-4 + S(t * 2) * 8} 420 -10`;
+  let tailD = '';  // no dangling tail: the thread only appears when she reaches for a clue
   if (reach && reach.p > 0) {
-    const pts = [tail0, ...reach.pts.map(toLocal)];
+    const pts = [hR, ...reach.pts.map(toLocal)];
     tailD = `M ${pts[0][0]} ${pts[0][1]}`;
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], b = pts[i], sag = (1 - (reach.taut ?? 0)) * 70;
@@ -194,9 +193,9 @@ export const Nitka: React.FC<NitkaProps> = ({t, x, y, s = 1, st, talk = 0, roll 
       {/* legs + shoes (tucked while rolling) */}
       {roll < 0.5 && [-1, 1].map((k) => <g key={k}><rect x={k * 38 - 8} y={-60 - tk * 10} width={16} height={56 + tk * 10} rx={8} fill={RED_D} /><ellipse cx={k * 48} cy={-4} rx={30} ry={15} fill={INK} /></g>)}
       {/* the loose thread: the channel's red thread */}
-      <path d={tailD} stroke={RED} strokeWidth={8} fill="none" strokeLinecap="round" pathLength={reach ? 1 : undefined}
-        strokeDasharray={reach ? 1 : undefined} strokeDashoffset={reach ? 1 - clamp(reach.p) : undefined} />
-      {reach && reach.p > 0 && reach.pts.map((pt, i) => { const [lx, ly] = toLocal(pt); return i >= (reach.pinFrom ?? 0) && reach.p >= (i + 1) / reach.pts.length ? <circle key={i} cx={lx} cy={ly} r={10} fill={RED_D} /> : null; })}
+      {tailD && <path d={tailD} stroke={RED_D} strokeWidth={5 / s} fill="none" strokeLinecap="round" opacity={0.9 * (reach?.fade ?? 1)} pathLength={reach ? 1 : undefined}
+        strokeDasharray={reach ? 1 : undefined} strokeDashoffset={reach ? 1 - clamp(reach.p) : undefined} />}
+      {reach && reach.p > 0 && reach.pts.map((pt, i) => { const [lx, ly] = toLocal(pt); return i >= (reach.pinFrom ?? 0) && reach.p >= (i + 1) / reach.pts.length ? <circle key={i} cx={lx} cy={ly} r={6} fill={RED_D} opacity={reach.fade ?? 1} /> : null; })}
       <g transform={`rotate(${rot} 0 ${cy})`}>
         {/* body */}
         <defs>
