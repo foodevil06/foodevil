@@ -1,0 +1,9 @@
+node_modules/
+build/
+.env
+.env.*
+.lumean.json
+_tmp/aligntest/
+_tmp/sfxtest/
+_tmp/check/
+*.log

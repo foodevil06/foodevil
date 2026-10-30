@@ -1,0 +1,146 @@
+{
+ "total": "auto",
+ "pads": [],
+ "events": [
+  {
+   "type": "sample",
+   "file": "public/sfx/paper.opus",
+   "t": 0.02,
+   "gain": 0.7
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/paper.opus",
+   "t": 0.28,
+   "gain": 0.35
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/paper.opus",
+   "t": 1.59,
+   "gain": 0.45
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/stamp.opus",
+   "t": 3.32,
+   "gain": 0.8
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 4.23,
+   "gain": 0.45
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 11.99,
+   "gain": 0.45
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 15.95,
+   "gain": 0.45
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 24.57,
+   "gain": 0.45
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/notify.opus",
+   "t": 6.27,
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/notify.opus",
+   "t": 8.41,
+   "gain": 0.3
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/stamp.opus",
+   "t": 15.35,
+   "gain": 0.85
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/send.opus",
+   "t": 17.493,
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/typing.opus",
+   "t": 19.73,
+   "gain": 0.7
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/typing.opus",
+   "t": 21.53,
+   "gain": 0.7,
+   "dur": 0.8800000000000019,
+   "fade": 0.2
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/stamp.opus",
+   "t": 21.29,
+   "gain": 0.55
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/vibrate.opus",
+   "t": 22.51,
+   "gain": 1.8,
+   "from": 1.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/hit.opus",
+   "t": 24.08,
+   "gain": 0.8
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/knock.opus",
+   "t": 28.91,
+   "gain": 1.0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/hit.opus",
+   "t": 30.44,
+   "gain": 0.45
+  }
+ ],
+ "music": [
+  {
+   "file": "public/music/mystic_violin.mp4",
+   "gain": 0.32,
+   "t0": 0,
+   "t1": "end",
+   "loop": true,
+   "fade": 2.5
+  },
+  {
+   "file": "public/sfx/room.mp4",
+   "gain": 4.0,
+   "t0": 0,
+   "t1": "end",
+   "loop": true,
+   "fade": 1
+  }
+ ],
+ "duck": {
+  "db": 7,
+  "music_db": 9,
+  "smooth": 0.12
+ }
+}

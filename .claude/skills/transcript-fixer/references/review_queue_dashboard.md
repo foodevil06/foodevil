@@ -1,0 +1,626 @@
+# Review queue and dashboard workflow
+
+Read this file when uncertain items must survive the session, when resolving or re-anchoring a queued item, or when wiring audio playback for human review.
+
+## Review Queue & Dashboard (uncertain items → one-keystroke verdicts)
+
+Store unresolved occurrences in `corrections.db` (`review_items`) so their
+anchors and evidence survive the session. Use the CLI or dashboard for verdicts;
+route confirmed reusable corrections through the dictionary policy below.
+
+A pending row records an unresolved occurrence; it does not assign the work to
+the user. Before asking for a verdict, follow [evidence selection and escalation](native_ai_full_workflow.md#evidence-selection-and-escalation).
+User-confirmed corrections are applied immediately; media-access failures do not
+reopen them or stop independent items.
+
+**Queue CLI** (all support `--json`):
+
+```bash
+# Enqueue uncertain items (native_ai_full_workflow.md step 7; '-' reads stdin)
+uv run scripts/fix_transcription.py --enqueue-review items.json
+# Inspect
+uv run scripts/fix_transcription.py --list-review            # pending, priority-sorted
+uv run scripts/fix_transcription.py --list-review --review-file /absolute/canonical.md --review-status all --json
+uv run scripts/fix_transcription.py --show-review 12         # full evidence + action pack
+# Decide (agent path — humans use the dashboard)
+uv run scripts/fix_transcription.py --resolve-review 12 --decision accepted --by reviewer
+uv run scripts/fix_transcription.py --resolve-review 12 --decision overridden --override-to "正确词" --authority "用户 2026-09-20 裁定：以群 displayName 为准" --note "<你的理由>"
+uv run scripts/fix_transcription.py --resolve-review 12 --decision kept_original   # transcript was right
+uv run scripts/fix_transcription.py --resolve-review 12 --decision reopen          # undo (reverts applied edits)
+```
+
+Each item carries: the original text (left untouched in the file), a pre-filled
+suggestion, `kind` (`entity`/`unknown` lead the queue because a wrong identity
+has higher business impact; the verdict is still file-only unless it separately
+passes the reuse matrix; `homophone`/`wording` trail), the evidence your search ladder
+produced, and an optional **action pack** executed on accept: `file_edit`
+(replace in the transcript), `dict_add` (add to a `--domain` dictionary),
+`append_note` (add a trap line to a domain context file). No action pack + a
+file anchor = the default single `file_edit`.
+
+### One occurrence, multiple candidates
+
+Treat the located body span as the question. Enqueue compares occurrences within
+the same exact file, domain and original, across line drift and suggested text.
+When two anchors uniquely locate one span, the queue retains one item and appends
+distinct candidates, evidence, action packs and optional `provenance` objects.
+Use `provenance` for dictionary/rule identity; Stage 1 also retains its dictionary
+source in candidate evidence. Repeated identical proposals do not create rows.
+Inspect `candidates` in `--show-review --json` or the dashboard before deciding.
+Different candidates require `overridden --override-to TEXT` or an explicit
+zero-based `--review-candidate N`; plain `accepted` refuses to silently choose
+the first. Without a candidate index, the representative item's action pack
+executes. With the index, only that candidate's suggestion/action pack executes;
+competing action packs are never combined. Inspect the chosen pack before deciding.
+
+For an existing batch, run:
+
+```bash
+uv run scripts/fix_transcription.py --consolidate-review \
+  --review-file /absolute/canonical.md --json
+```
+
+This scoped migration links uniquely located pending rows, preserves their old IDs,
+actions and audit history, and reports `ambiguous_ids` and `verdict_conflicts`.
+Normal listings/counts show representatives; old IDs remain readable and name their
+`occurrence_parent`. Resolve the representative, using an explicit override when
+candidates conflict. Its verdict settles linked pending rows with the selected
+`resolved_text`; reopening it restores the linked rows to pending. Already-decided
+rows are not rewritten by consolidation. Repeated enqueue performs the same scoped
+linking for its file and records any refreshed live anchor in the audit trail.
+
+Identity recovery may use an unchanged neighbour of at least six characters only
+when it identifies one slot in the whole file. It never equates slots by nearest
+line or edit distance. A broad legacy context containing several originals without
+an offset remains ambiguous: inspect it and use the explicit offset repair below.
+Do not assign it to the first occurrence or discard it as a duplicate. A type or
+candidate conflict is retained; aggregation supplies no new authority.
+
+Exact recorded coordinates are a retry identity only while the strictly decoded
+UTF-8 file has its recorded content fingerprint. Changed files and old anchors
+without that fingerprint require independently unique context; they cannot borrow
+an old line number. Historical decided retries also require the actual unique
+applied context. Replaying an identical proposal for an unresolved multi-slot
+legacy report retains that same ambiguous question without attaching a new
+candidate, refreshing its version or claiming a physical slot.
+
+### Written authority for nonperson names
+
+Keep omitted `entity_type` as `unknown`; `null`, blank and unrecognised values are
+invalid in enqueue payloads. `unknown` and `person` retain the person-name guard.
+Classify an occurrence as `system`, `product`, `organization` or `place` only from
+explicit source/context evidence. A type label or prose containing a business
+term is insufficient. For an existing row use `--review-entity-type TYPE` with
+the verdict; classification and authority persist only if the verdict succeeds.
+
+Supply a written reference through `--authority-record`:
+
+```json
+{
+  "kind": "entity_reference",
+  "entity_type": "system",
+  "item_id": 12,
+  "target": "明台",
+  "source_ref": "project-registry:line-8",
+  "source_path": "/absolute/source-record.md",
+  "quote": "业务系统：明台系统。"
+}
+```
+
+The CLI checks the item/target/type, reads `source_path`, and requires the exact quote
+and target there. It checks the type cue at the recorded `context_offset`; without
+an offset, the context must contain exactly one original. An adjacent type cue
+remains supported (for example `名台系统` for `system`). It rejects a type conflicting with a known
+roster name/variant. Use a verified local export for a remote reference; keep its
+source identity in `source_ref`. The operator judges whether the source is
+authoritative: literal quote validation cannot establish that judgment or infer
+the referent's identity. A source reference for a system never authorises a
+person-name correction. Missing cues, unavailable sources or conflicting people
+evidence leave the row pending; do not manufacture roster/audio/user citations.
+
+For `organization`, the CLI also supports a source-bound company short name:
+
+- The source quote must name the target followed by a literal name extension and
+  `有限公司`, `公司`, `集团` or `机构`. The selected occurrence must carry the same
+  extension (or a prefix of at least two characters), followed by a name boundary.
+- The selected occurrence must follow `我是`, `我就是`, or `我叫NAME，` and
+  introduce the company name with `的创始人。我们公司`
+  (commas, full stops and whitespace may separate those two phrases), or refer to
+  its account with `[可以]关注[一下][这个/这家/我们]NAME，我们在/有/是/做…` after that
+  same-name company introduction in the same paragraph. Brackets mark optional
+  words; slashes mark alternatives. A name extension alone supplies no type cue.
+  The company self-description must begin with `是`, `做`, `研发`, `生产`, `成立`,
+  `从事`, `主要`, `专注`, `提供`, `开发` or `经营`; other phrasing stays pending.
+- Negative statements, person/product uses, a different name extension, a separate
+  paragraph, an unrelated company quote, or an ambiguous selected slot refuse this
+  short-name route. The account-reference check includes its whole sentence,
+  including clauses before a comma. Source authority and the referent still require operator review;
+  these finite syntax checks do not infer a company from a product word.
+
+```bash
+uv run scripts/fix_transcription.py --resolve-review 12 --decision accepted \
+  --review-entity-type system --authority-record entity-reference.json --json
+```
+
+### Written evidence for ordinary wording
+
+`kind=wording` does not bypass the person-name guard: short CJK phrases can have
+the same single-edit shape as names. A parallel transcript quote is written
+evidence, not a user verdict or audio verification. When that is the evidence
+actually available, use this finite `wording_reference` record rather than naming
+an authority class the operator has not obtained.
+
+The first supported construction is `message_arrival`: a whole clause
+`[还]有信息来` or `[还]有消息来`. Brackets mean optional. The original must be a
+whole `[还]有XX来` clause, with two CJK characters in place of `XX`. The selected
+candidate must remain `kind=wording`, `entity_type=unknown`; person/entity kinds,
+other syntax and known roster names/variants retain their existing authority route.
+This is a bounded nonperson discriminator, not a general grammar classifier.
+
+Synthetic example: the selected context is `有消吸来。先看记录，再决定。`, and a
+verified parallel export contains `这两天没更新。还有消息来。`. Bind the exact
+current queue item and literal strings, not this example's ID or source path:
+
+```json
+{
+  "kind": "wording_reference",
+  "construction": "message_arrival",
+  "source_type": "parallel_transcript",
+  "item_id": 12,
+  "original": "有消吸来",
+  "target": "有消息来",
+  "context": "有消吸来。先看记录，再决定。",
+  "context_offset": 0,
+  "source_ref": "parallel-export:turn-2",
+  "source_path": "/absolute/parallel-export.md",
+  "quote": "这两天没更新。还有消息来。",
+  "quote_offset": 8
+}
+```
+
+Offsets are zero-based Unicode-character offsets. `context_offset` must select
+the recorded original occurrence, and `quote_offset` the exact target within the
+quote. Both selected clauses must be whole: a target embedded in a person's name,
+an attribution or another phrase does not qualify. Missing, null, blank, wrong-item
+or wrong-target fields refuse without changing the verdict/evidence or transcript.
+The CLI reads `source_path` and verifies the quote literally; the operator must
+still verify that the export is the same utterance and is reliable enough to
+settle this wording. The record neither authenticates the source nor establishes
+independent acoustic corroboration.
+
+```bash
+uv run scripts/fix_transcription.py --resolve-review 12 --decision overridden \
+  --override-to '有消息来' --authority-record wording-reference.json --json
+```
+
+Read back the exact occurrence and queue verdict. This settles only the bound
+occurrence; it does not create a reusable rule. If the supported syntax or source
+requirements do not fit, retain the raw form pending another available evidence
+route. Do not relabel an unresolved person question as wording to pass this branch.
+
+### Cited answers and ledger writes
+
+When the user answers an unresolved term or name question, preserve that answer
+and its source before accepting the queued edit. A structured `answer.json` is:
+
+```json
+{
+  "kind": "user_answer",
+  "item_id": 12,
+  "target": "Spec Kit",
+  "source_ref": "conversation:session-id#message-id",
+  "quote": "是，Spec Kit"
+}
+```
+
+The item ID and target must match this verdict. `source_ref` and `quote` must
+be nonempty strings. The new citation path recognises a bounded affirmative
+syntax, rather than treating a target mention as approval:
+
+- The whole quoted clause is `是` / `是的` / `对` / `对的` / `确认` / `yes`,
+  followed by the exact target, with optional whitespace and one comma or colon
+  between them; one final `。` / `.` / `!` / `！` is optional. Only `yes` is
+  case-insensitive; the target keeps its exact spelling. `是，Spec Kit` passes.
+- A standalone affirmative word from that list (with optional final punctuation)
+  also requires a verbatim `question` in the finite positive-question syntax:
+  `(这里|这|这句|这个词|该词|你说的|录音里提到的)是 TARGET 吗？`,
+  `是 TARGET 吗？`, `是不是 TARGET？`, or `Is (it|this|that) TARGET?`.
+  Whitespace is optional around the Chinese target; Chinese questions can end
+  in `吗` with optional `？`/`?`, or just `？`/`?`. English question words are
+  case-insensitive. `这里是Spec Kit吗？` + `是` and `Is it Spec Kit?` + `yes` pass.
+
+The whole clause/question must match; trailing denials or extra candidates are
+not discarded. `Spec Kit 不对`, `Spec Kit 是错的`, a bare `Spec Kit`, uncertain
+answers and answer clauses ending in a question mark do not qualify.
+`Spec Kit不对吗？` + `是` and `This is not Spec Kit?` + `yes` also refuse automatic
+adjudication. Unsupported wording leaves the occurrence pending.
+
+This deliberately excludes some legitimate natural answers, such as `我说的是
+Spec Kit` and `Spec Kit 是对的`, and longer questions outside the listed syntax.
+After reading the complete source message and question, an operator can quote a
+literal affirmative clause or positive question that is actually present, with
+the same source reference. Do not paraphrase, manufacture a supported answer, or
+strip words that reverse its meaning. If no supported literal clause exists,
+retain the full original wording and use the existing obtained-authority path
+with an accurate source citation, or keep the item pending for interpretation.
+The validator checks this record's shape and scope. It does not fetch the source
+or authenticate the speaker. Cite an answer actually received in the current
+conversation or a source you read; a repository's spelling proves vocabulary,
+not what the speaker meant. Bare `用户明确回答` text does not bypass the guard.
+Existing `--authority` roster/audio/user-ruling citations keep their contract.
+
+```bash
+uv run scripts/fix_transcription.py --resolve-review 12 --decision accepted \
+  --authority-record answer.json --ledger-entry 'sagakit→Spec Kit（用户明确回答）' --json
+```
+
+`--ledger-entry` is optional and requires the anchored transcript's existing
+single-line `asr_note` in leading YAML. The entry must start with this item's
+actual `original→resolved` pair. It appends a confirmed entry, preserving
+the ledger's old-form evidence. Multi-line ledgers are refused. The body edit
+and ledger update are planned before writing and replaced as one complete file;
+the exact resulting bytes are read back. An authority or anchor refusal changes
+neither file, evidence nor verdict. The evidence append and verdict share one
+SQLite transaction. `reopen` reverts the ledger line only if it still matches the
+line this action wrote, preserving subsequent changes.
+
+Files and SQLite are separate media. A process interruption after the file
+replacement but before the SQLite commit can leave corrected body/ledger with a
+pending queue item. Read both, then retry the same anchored resolve and ledger
+entry: an already-applied edit is recognised and the ledger entry is not repeated.
+If the anchor drifted, stop and re-anchor rather than treating a file's presence
+as success. Ordinary database errors attempt reversal of logged edits and report
+whether rollback was incomplete; dictionary additions and concurrent edits are
+not guaranteed reversible. Cross-file action packs do not form a filesystem
+transaction. A successful retry records prior text without taking ownership of
+its earlier write, so a later `reopen` need not remove that prior text.
+
+Stop dependent work on any nonzero exit or JSON `error`. A successful command
+after a shell newline can hide the resolve command's exit status. Chain dependent
+commands with `&&` or use a subprocess that checks the return code, then separately
+read the file and `--show-review ID --json` before claiming the correction landed.
+
+**Fail-closed anchor guard**: the whole action pack is planned in memory
+against the CURRENT file state (each edit validated against the content as the
+pack's previous actions left it), and only when every action plans successfully
+does anything reach disk — original text missing (file edited since enqueue),
+ambiguous (multiple occurrences with no unique winner near the line hint), or a
+drifted context (no nearby line matches the snippet recorded at enqueue) →
+nothing is written, the CLI exits 2 with a `{"error": "re_anchor_needed"}`
+status object, and the item stays pending. A wrong auto-edit is worse than a
+missed one. One shape is recognised instead of refused: the context recorded
+at enqueue reappears in the ledger-masked file with the resolved text in the
+slot the original occupied — a fix applied by hand before the verdict (the
+original may survive in other utterances far from the hint, or inside the
+suggestion itself). The verdict is recorded, nothing is written, and the apply
+log carries `already in place at the anchor — recorded without writing`
+(`reopen` then re-pends the row without reverting anything). The recognition
+fails closed, and the message says which, when the original still sits within
+the resolve window (±3 lines around the line hint) outside the suggestion,
+when the same neighbourhood
+also appears with a third form in the slot (anywhere at the matched width, or
+near the hint at any width down to two characters a side), or when the edit
+touched the characters next to the slot; an anchored utterance deleted or
+rewritten past both neighbours while an identical one elsewhere reads corrected
+cannot be told from drift and is recorded as accepted. `--reanchor-review`
+refuses a row whose context already reads corrected rather than re-pointing it
+at a surviving occurrence. Machine callers should parse the stdout `error`
+field rather than the bare return code (argparse usage errors also exit 2). On
+`overridden`, only
+retargeted `file_edit`s run — suggestion-specific `dict_add`/`append_note`
+actions are dropped (they were planned for a suggestion the human rejected).
+The context guard also checks a unique occurrence when a line hint exists;
+its uniqueness alone does not prove it is this row's utterance.
+
+**When the guard refuses: `--reanchor-review` repairs the item.** A refusal is
+not a dead end and NOT a cue to hand-edit the file around the queue — that
+leaves the item pending forever and the edit unaudited. Run the re-anchor and
+then verdict again:
+
+```bash
+uv run scripts/fix_transcription.py --reanchor-review <id> [<id>...]
+# file itself is gone (moved/renamed/cleaned)? add search root(s):
+uv run scripts/fix_transcription.py --reanchor-review <id> --reanchor-root <dir-with-transcripts>
+```
+
+Drift repair checks current disk state and fails closed:
+**context/line drift** (file edited since enqueue — re-locates `original` in
+the file, preferring lines that still match the RECORDED context snippet over
+mere distance, refreshes line + verbatim context) and **file gone** (searches
+the recorded parent dir plus every `--reanchor-root` for `*.md` containing
+`original`; exactly one candidate re-points the anchor, zero changes nothing,
+and multiple asks for `--reanchor-to FILE` — the explicit-target form, which
+is itself refused if `original` is not in it). After a successful re-anchor,
+the guard's context check passes and `A`/`W`/CLI resolve proceed normally
+(explicit action packs get their `file_edit` path rewritten to the new file).
+The refusal messages themselves name this command.
+
+**Promote each `decision_note`; the queue only stores it.** The dashboard's
+备注 field and the CLI's `--note` record the reviewer's reason, but neither
+turns that reason into a reusable rule. After a review batch, inspect the full
+queue JSON:
+
+```bash
+uv run scripts/fix_transcription.py --list-review --review-status all --json
+```
+
+The human-readable list never prints `decision_note`. Human-readable
+`--show-review` prints it only after an item leaves `pending`; JSON always
+carries the field, including on an item that `reopen` returned to `pending`.
+Inspect every item with a non-empty note, regardless of status, and do not
+pre-project a field list that could discard a field the reviewer supplied.
+
+Route the note by meaning rather than by verdict:
+
+| The note says | Promote it to | Do not |
+|---|---|---|
+| an apparent error is an intentional, context-dependent substitution | the domain context file, with the cue that distinguishes when to preserve it | use `--add`, which would rewrite the text |
+| a dictionary rule fired where it should not | `--report-false-positive "<from>" "<to>" -d <domain>` | leave the rule active behind a context note |
+| a stable FROM→TO correction will recur in this domain | `--add "<from>" "<to>" --domain <project>`, subject to [dictionary_identity_and_context.md](dictionary_identity_and_context.md) | |
+| a recurring person's name has a non-obvious spelling | the people roster, which is hand-edited | |
+
+A `decision_note` is never an action. A preplanned `append_note` action runs
+only when its item is `accepted`; `overridden` drops suggestion-specific
+`dict_add` and `append_note` actions, while `kept_original` and `skipped` run
+no actions. Explicitly promote the note after the verdict. This is the same
+gap as **"An override does not compound on its own"** below: corrected text
+stops at `resolved_text`, and the reason stops at `decision_note`.
+
+**Enqueue validates anchors verbatim — authoring errors die at enqueue, not
+at verdict.** When an item declares a readable `file`, `--enqueue-review`
+checks that `original` (and `context`, if given) literally appears in it, and
+repairs a line hint that points beyond the resolve window of a
+UNIQUE match (a hint inside the window works as-is and is left alone; repairs
+are printed to stderr). Anything else is REJECTED on the spot with the
+reason, and the run exits 3 — the JSON carries the rejects under
+`rejected_unanchored` (items under `added` WERE enqueued; fix the rejects and
+re-enqueue them). `context` must be copied verbatim from the file; a
+paraphrase drifts the anchor at the first surrounding edit. (Files that don't
+exist yet are not validated — e.g. items enqueued for a file on another
+machine; the resolve-time guard owns that case. `stage1_deferred` items are
+also exempt — their `from_text` is the engine's evolving text after earlier
+rules applied in-memory, legitimately not in the input file yet.)
+
+**One verdict fixes one occurrence — sweep the siblings yourself.** A resolved
+item edits exactly one span. When the original text occurs several times the
+guard does not edit them all: it picks the occurrence nearest the recorded line
+hint whose context matches, and refuses (`re_anchor_needed`) when it cannot
+choose — no line hint at all, nothing matching near the hint, or two occurrences
+equally near it. Either way the other occurrences are left standing,
+**including on the very line the verdict just edited**, which is
+where a repeated name is most likely.
+
+### Same-line occurrence anchoring
+
+When the same token occurs twice on one line, supply a verbatim context that
+contains only the intended occurrence, or include `context_offset`: the zero-based
+Unicode character index of the intended token inside that context (Python string
+indexing, not byte offsets or UTF-16 units). Supply the line hint as well. For
+`先读 actor，再校对 actor。`, the second `actor` starts at `13`.
+The queue checks that this slice equals `original`; it never guesses a position
+from which occurrence was enqueued first. Omitted/null offsets retain legacy
+behavior: a context covering both occurrences stays ambiguous and acceptance
+refuses. Different contexts/offsets preserve separate questions; re-running an
+identical anchor skips it even after a verdict.
+
+Stage 1 supplies one offset per raw occurrence only when its input bytes decode
+exactly to the engine input, its output leaves that input unchanged, and the
+raw occurrence count for the same pair and line equals the deferral count. It
+stores the complete original line, including a token beyond character 200.
+Applied corrections, normalized newlines or unmatched counts retain null
+offsets and the existing ambiguity refusal. Prefix and full-form rules remain
+independent candidates.
+
+For an explicit slot, the guard uses its surrounding context without sibling
+occurrences of the old token. Accepting one slot therefore leaves the other row
+independently reviewable even when the replacement changes the line's length.
+An already-corrected selected slot can be recorded without editing a surviving
+sibling. Missing, overlapping or indistinguishable neighbours still refuse; an
+offset is not permission to edit whatever now occupies that character index.
+The legacy no-offset already-applied guard retains its broader nearby-survivor
+check described above.
+
+Repair a pending legacy row with
+`--reanchor-review ID --reanchor-context-offset N` (or the Python API
+`ReviewQueue.reanchor(item_id, context_offset=N)`) when independent source evidence
+identifies the intended slot. The CLI requires exactly one ID and a nonnegative
+integer; this option cannot accompany another command. `N` is a zero-based
+Unicode character index in the row's recorded context, not a byte offset or an
+index in the current whole line. The method validates that slot against the current file,
+refreshes its context/offset under the same row ID and writes `review_reanchor`
+audit evidence; it does not change the verdict or transcript. Re-read the row and
+file before enqueuing missing siblings. Omitting `--reanchor-context-offset`
+preserves the ordinary reanchor behavior: an existing offset is retained, and an
+ambiguous legacy row still refuses. Wrong slices, missing context, drift and
+already-decided rows refuse without changing the file, row or audit history.
+
+```bash
+# 1. See what was actually decided. The default listing shows PENDING only —
+#    the items you just resolved are precisely the ones it hides.
+uv run scripts/fix_transcription.py --list-review --review-status accepted
+uv run scripts/fix_transcription.py --list-review --review-status overridden
+# 2. Read the verdict that was recorded, per item.
+uv run scripts/fix_transcription.py --show-review <id> --json
+```
+
+**Take the replacement from `resolved_text`, never from the listing line.** On
+an override the human's typed text lands in `resolved_text` while
+`suggested_text` still holds the suggestion they *rejected* — and the
+human-readable listing prints the suggestion. Propagating from that line pushes
+the rejected answer into every remaining occurrence, which is worse than leaving
+them alone. An override is free text, so read it before propagating: a typo
+typed once otherwise becomes a typo in five places.
+
+Fix the remaining occurrences with Edit, or a `sed` scoped to that **one file**
+— this is within-file propagation of a decision a human already made, not the
+cross-file find-and-replace the batch rules forbid — then re-grep to confirm.
+
+**Sweep `entity`-kind items only.** A `homophone` or `wording` verdict is a
+judgement about *that sentence* — those are the context-dependent class that
+[native_ai_full_workflow.md](native_ai_full_workflow.md) anchors to surrounding text, and the class the `争`→`蒸` row keeps out of
+blanket rules. Propagating one across a file is the mistake the dictionary matrix
+exists to prevent.
+
+**And within `entity`, a verdict settles the entity, not every token that sounds
+like it** — this is the entity carve-out in [native_ai_full_workflow.md](native_ai_full_workflow.md). An occurrence that is a
+*referred-to* third party rather than the person being addressed ("I'll ask
+`<token>` from the bank") can legitimately need the opposite answer: leave it and
+enqueue it on its own. A verdict the human reached **by listening to one clip**
+deserves the same caution — those seconds of audio settle that utterance, and a
+second occurrence is a second utterance. Sweep the occurrences that are plainly
+the same entity in the same sense.
+
+**Sweep after the whole batch is resolved, not between verdicts.** A swept
+occurrence that a still-pending item is anchored to is recognised by that item's
+guard only when the sweep put exactly the item's suggestion there (the item then
+records `accepted` without writing); a sweep to anything else fails the guard
+(`re_anchor_needed`, exit 2) and the item closes with `skipped` plus a note or
+is enqueued afresh.
+
+**An override fixes this occurrence; reusable learning is a separate decision.** On
+`overridden` the queue drops the `dict_add` / `append_note` actions (they were
+planned for the suggestion the human rejected), so the strongest signal in the
+whole loop — a human personally correcting the AI — first lands only in the
+exact file. Route it through [dictionary_identity_and_context.md](dictionary_identity_and_context.md):
+only a stable recurring pattern gets `--add`; a rare sentence-local correction
+stops file-local, and an identity relationship belongs in roster/context rather
+than a replacement rule.
+
+**Dashboard** (single reviewer, local):
+
+```bash
+uv run scripts/review-dashboard/server.py --file "/absolute/canonical.md"
+# Optional: land on one entity fork while keeping the rest of this file visible
+uv run scripts/review-dashboard/server.py --file "/absolute/canonical.md" --item <id>
+```
+
+Prodigy-style single-focus card: live file context with the anchor line
+highlighted, suggestion pre-filled, evidence shown, keyboard-first —
+`Q` play the utterance · `A` accept · `R` original-is-correct · `W` override
+(type the right text) · `S` skip/can't judge · `Z` undo · `↑↓`/`J K` navigate
+(verdict keys deliberately cluster on the left hand; the right hand stays on
+the mouse). Env knobs: `REVIEW_DASHBOARD_PORT` (default 8767),
+`REVIEW_DASHBOARD_NO_BROWSER=1` to skip auto-opening a browser tab.
+Reads go straight to the DB (read-only); **every write shells out to the CLI**,
+so the state machine, anchor guards, and audit log stay the single source of
+truth, and agent (CLI) and human (page) are equal writers.
+
+The blue scope bar is a hard review boundary: its counts and cards belong only
+to that canonical path. When the human says the markings are done, read the
+same scope back before doing any more transcription work:
+
+```bash
+uv run scripts/fix_transcription.py \
+  --list-review --review-file "/absolute/canonical.md" \
+  --review-status all --json
+```
+
+`stats.pending_total: 0` closes this file's human gate. A global pending count,
+the dashboard merely being open, or the human's chat message without this
+readback does not.
+
+### Source audio and timeline pairing
+
+**Audio playback (`Q`)** — often the reviewer can't judge a garbled utterance
+from text alone; hearing the original second settles it. A transcript opts in
+by declaring its recording EXPLICITLY in frontmatter (no implicit directory
+scanning — if the field is absent, the card simply has no play button):
+
+```yaml
+---
+date: 2026-08-02
+minute_token: abc123
+audio: /absolute/path/to/recording.m4a
+---
+```
+
+**Add the line to the block the transcript already has — do not append a second
+one.** A synced transcript normally arrives with frontmatter (`date`,
+`minute_token`, `participants`…), and the parser stops at the first `---`
+terminator it meets, so a second block below it is never read.
+
+**Write the value bare — no trailing comment.** The parser takes everything after
+the first colon (`line.split(":", 1)[1].strip()`) and does not strip `#`, so
+`audio: /path/x.m4a  # same timeline` becomes a path ending in `# same timeline`,
+which does not exist. Same for the block's shape: it must open at line 1, be
+closed by its `---`, and the key must sit unindented.
+
+Every one of those mistakes fails the same way — the card shows **no play button
+and no error**, which reads exactly like "this transcript has no audio." If a
+card you expected to have audio doesn't, suspect the frontmatter before you
+suspect the recording.
+
+The file must be on the **same timeline the transcript's timestamps refer to** —
+the exact file fed to the ASR. A transcript produced from a 1.3x-speed input
+pairs only with the 1.3x file; pairing it with the original makes every clip play
+the wrong seconds.
+
+The dashboard derives the clip window from the speaker-timestamp lines
+(`<speaker> HH:MM:SS.mmm`) around the anchor, streams the file with HTTP Range
+(instant seek, no full download), and plays just that utterance; `± 3s` widens
+the window when the cut lands mid-sentence. Verify the timeline pairing once
+per recording source (`ffprobe` duration ≈ the transcript's last timestamp) —
+a mismatched speed rate plays the wrong seconds everywhere.
+
+**Wiring audio for a Feishu-minute transcript** (the common case when the
+transcript came from a minutes-sync pipeline) — use the bundled script, which
+does the download, the timeline check, and prints the frontmatter line:
+
+```bash
+uv run scripts/fetch_minute_audio.py \
+  --token <minute-token> --profile <lark-cli-profile> --as user \
+  --output ~/.transcript-fixer/cache/audio/<name>.m4a \
+  --transcript <path/to/transcript.md>
+```
+
+**Both arguments come from outside the transcript's body.** `--token` is the
+`minute_token:` field in the transcript's own frontmatter (a minutes-sync
+pipeline writes it there; if it is absent, the minute URL's last path segment is
+the same value). `--profile` is a lark-cli profile name — list them with
+`lark-cli profile list` and select an account already authorized for the
+recording; the transcript does not record it, so if the source account is unknown,
+ask rather than guess. Preserve a profile already established by the source
+workflow; diagnose its actual CLI/API error before changing the account.
+
+The executing agent preserves both the known profile and source identity:
+`--as user` is the helper's default; use `--as bot` only when the source workflow
+used the application identity. A missing URL is an unknown/malformed result,
+not proof of a permission denial. Read the reported CLI/API error before choosing
+a recovery path; an explicit export refusal stops that export route.
+
+Keep the audio outside the docs repo — a media blob should not ride into its git.
+
+**Exit codes** — check the status, not the output: diagnostics go to stderr while
+the `audio:` line goes to stdout, so a run that verified nothing still prints a
+usable-looking line.
+
+| code | meaning |
+|---|---|
+| `0` | duration comparison passed; still verify the source identity and one spoken anchor before relying on clip offsets |
+| `1` | timeline mismatch: a file downloaded, but do **not** wire it |
+| `2` | downloaded, pairing unverified — `ffprobe` absent or its output unusable, no `--transcript`, the transcript has no `<speaker> HH:MM:SS.mmm` lines, or every one of them is `00:00:00` (argparse also exits 2 on a malformed invocation; its message says so) |
+| `3` | nothing usable produced — bad `--transcript` path (checked before any network work), CLI/API export failure, malformed/missing URL, curl failure or undersized download. The diagnostic preserves the observed error; it does not infer missing permissions. |
+
+A `2` caused by missing speaker-timestamp lines is worth stopping for rather than
+working around: the dashboard builds its clip windows from those same lines, so
+audio wired to such a transcript has nothing to play.
+
+**Export and download failure recovery.** If the CLI's direct file-download
+route reports `blocked download URL: local/internal host is not allowed`, use
+the bundled helper above with the same authorized profile and identity. It owns
+the `--url-only` request, JSON-envelope validation, URL extraction, download and
+duration comparison; do not maintain a second shell parser or copied tolerance.
+An explicit API export denial stops that export route. A malformed result leaves
+export status unknown; read the actual diagnostic and correct that cause without
+switching accounts or inferring a permission denial from an absent URL.
+
+Wire the audio **before** enqueueing items you intend to have judged by ear
+([native_ai_full_workflow.md](native_ai_full_workflow.md) routes cross-language proper nouns there) — otherwise the reviewer opens
+a card with no play button and no way to answer the question you asked.
+
+**Stage 1 integration**: safe-mode deferrals are auto-enqueued
+(`source: stage1_deferred`) at run time, so a caller discarding the sidecar no
+longer loses them. Exception: an input under the OS temp dir is NOT enqueued
+(the anchor would be a dead pointer once the staging copy vanishes) — the
+`--json` `deferred` count still reports those to the caller, and the additive
+`review_enqueued` field says how many landed in the queue.

@@ -1,0 +1,1990 @@
+#!/usr/bin/env python3
+"""
+Review Queue - persistent store for uncertain corrections awaiting a human verdict.
+
+SINGLE RESPONSIBILITY: track review items (uncertain ASR corrections) and execute
+their proposed action packs once a human decides.
+
+Why this exists: the pipeline has three places where "needs a human" items were
+produced but never persisted anywhere durable —
+  1. native AI-pass uncertain items (previously only listed in chat, evaporated)
+  2. Stage 1 safe-mode deferrals (previously only a *_needs_review.md sidecar,
+     which callers running in temp dirs silently discarded)
+  3. learned suggestions (CLI-only review entry, effectively unused)
+This module gives all three one queue with an append-audited decision lifecycle,
+so confirmations compound into the dictionary instead of being lost.
+
+Design (borrowed from annotation-tool practice — Prodigy/Argilla):
+  * every item carries a PRE-FILLED suggestion + evidence, so agreeing is one action
+  * validate ALL proposed actions before writing, then apply
+    (an item whose anchor text has drifted fails closed — "re-anchor needed" —
+    rather than editing the wrong text; a wrong auto-edit is worse than a missed one).
+    Files and SQLite are separate commit media; interrupted writes require readback.
+  * the queue is CLI-first: the web dashboard shells out to the CLI for every
+    write, so agent and human are equal writers and the DB stays the SSOT
+"""
+
+from __future__ import annotations
+
+import json
+import hashlib
+import os
+import re
+import sqlite3
+import tempfile
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Optional, NamedTuple
+
+# Ledger frontmatter (`asr_note`) masking, shared with Stage 1 and the AI
+# passes. Imported here so the ACCEPT path honours the same contract the
+# dictionary path does — see _plan_file_edit.
+from core.dictionary_processor import (
+    _mask_ledger_spans,
+    _restore_ledger_spans,
+)
+
+VALID_SOURCES = ("native_pass", "stage1_deferred", "learned_suggestion", "manual")
+VALID_KINDS = ("entity", "homophone", "wording", "unknown")
+VALID_DECISIONS = ("accepted", "overridden", "kept_original", "skipped", "reopen")
+# Lines either side of the recorded line hint that resolve-time anchoring and
+# enqueue-time hint repair treat as "near the hint". One definition; the prose
+# in references/review_queue_dashboard.md states it once and nowhere else.
+RESOLVE_WINDOW_LINES = 3
+PENDING = "pending"
+
+# Priority conventions (higher = review first). Entities compound the most
+# (dictionary + roster/ledger), so they lead the queue.
+PRIORITY_BY_KIND = {"entity": 100, "unknown": 90, "homophone": 30, "wording": 10}
+
+ACTION_REQUIRED_KEYS = {
+    "file_edit": {"path", "old", "new"},
+    "dict_add": {"from", "to", "domain"},
+    "append_note": {"path", "anchor", "text"},
+}
+
+
+class ReviewQueueError(Exception):
+    """Base error for review queue operations."""
+
+
+class ReAnchorNeeded(ReviewQueueError):
+    """The item's anchor text no longer matches the target file — the file
+    changed since enqueue. The decision is NOT recorded; fail closed.
+
+    One shape is told apart before this is raised: on `accepted` / `overridden`,
+    when the context recorded at enqueue reappears in the ledger-masked file
+    with the resolved text in its slot and nothing near the hint contradicts
+    it, the fix was applied by hand and the verdict is recorded without
+    writing (`_already_applied_verdict`). Every other missing-anchor shape
+    still lands here."""
+
+
+class AppliedVerdict(NamedTuple):
+    """Result of `ReviewQueue._already_applied_verdict`."""
+    kind: str                 # applied | survivor | other_form | absent
+    hit_lines: list[int]      # lines where the recorded context reads with `new`
+    other_lines: list[int]    # survivor / other_form lines (empty otherwise)
+
+
+@dataclass
+class ReviewItem:
+    id: int
+    created_at: str
+    source: str
+    domain: str
+    file_path: Optional[str]
+    line_number: Optional[int]
+    context_snippet: Optional[str]
+    original_text: str
+    suggested_text: Optional[str]
+    kind: str
+    evidence: Optional[str]
+    actions: list[dict[str, Any]] = field(default_factory=list)
+    priority: int = 0
+    status: str = PENDING
+    decided_at: Optional[str] = None
+    decided_by: Optional[str] = None
+    decision_note: Optional[str] = None
+    resolved_text: Optional[str] = None
+    applied_at: Optional[str] = None
+    apply_log: Optional[list[dict[str, Any]]] = None
+    context_offset: Optional[int] = None
+    entity_type: str = "unknown"
+    occurrence_parent: Optional[int] = None
+    candidates: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "created_at": self.created_at,
+            "source": self.source,
+            "domain": self.domain,
+            "file_path": self.file_path,
+            "line_number": self.line_number,
+            "context_snippet": self.context_snippet,
+            "context_offset": self.context_offset,
+            "entity_type": self.entity_type,
+            "occurrence_parent": self.occurrence_parent,
+            "candidates": self.candidates,
+            "original_text": self.original_text,
+            "suggested_text": self.suggested_text,
+            "kind": self.kind,
+            "evidence": self.evidence,
+            "actions": self.actions,
+            "priority": self.priority,
+            "status": self.status,
+            "decided_at": self.decided_at,
+            "decided_by": self.decided_by,
+            "decision_note": self.decision_note,
+            "resolved_text": self.resolved_text,
+            "applied_at": self.applied_at,
+            "apply_log": self.apply_log,
+        }
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+# A frontmatter `key:` line. Deliberately unindented, matching
+# `dictionary_processor._mask_ledger_spans`: an indented key is part of a
+# multi-line YAML value, which neither the masker nor this parser reads.
+_FRONTMATTER_KEY_RE = re.compile(r"^([A-Za-z_][\w-]*):")
+
+
+def is_temp_path(path: str | Path) -> bool:
+    """True when the path lives under the OS temp dir — a caller pipeline's
+    staging copy. Queue items must not anchor to files that vanish."""
+    try:
+        resolved = Path(path).resolve()
+        tmp = Path(tempfile.gettempdir()).resolve()
+        return resolved == tmp or tmp in resolved.parents
+    except (OSError, ValueError):
+        return False
+
+
+def validate_actions(actions: list[dict[str, Any]]) -> None:
+    """Validate action pack shape at enqueue time. NO FALLBACK: a malformed
+    action is rejected now, not silently skipped at apply time."""
+    if not isinstance(actions, list):
+        raise ReviewQueueError("actions must be a list")
+    for i, action in enumerate(actions):
+        if not isinstance(action, dict):
+            raise ReviewQueueError(f"action[{i}] must be an object")
+        atype = action.get("type")
+        if atype not in ACTION_REQUIRED_KEYS:
+            raise ReviewQueueError(
+                f"action[{i}] has unknown type {atype!r} "
+                f"(valid: {sorted(ACTION_REQUIRED_KEYS)})"
+            )
+        missing = ACTION_REQUIRED_KEYS[atype] - set(action.keys())
+        if missing:
+            raise ReviewQueueError(f"action[{i}] ({atype}) missing keys: {sorted(missing)}")
+
+
+class ReviewQueue:
+    """Data access + decision execution for review items.
+
+    dict_add actions are executed through an injected callable
+    (``dict_add_fn(from_text, to_text, domain, note) -> None``) so this module
+    stays free of the service layer; the CLI wires it up. If an action pack
+    contains dict_add and no callable was injected, resolution fails loudly.
+    """
+
+    def __init__(self, db_path: Path, dict_add_fn: Optional[Callable[..., None]] = None):
+        self.db_path = Path(db_path)
+        self.dict_add_fn = dict_add_fn
+        if not self.db_path.exists():
+            raise ReviewQueueError(
+                f"database not found: {self.db_path} — run --init first"
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=15)
+        conn.row_factory = sqlite3.Row
+        try:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='review_items'"
+            ).fetchone()
+        except sqlite3.DatabaseError:
+            conn.close()
+            raise
+        if not exists:
+            conn.close()
+            raise ReviewQueueError(
+                "review_items table missing — run any transcript-fixer command "
+                "once (e.g. --list) to apply the schema, or --init"
+            )
+        # Additive migration: preserve every historical verdict and its anchor.
+        # Serialize the check and ALTER so two CLI writers cannot race it.
+        if "context_offset" not in {r[1] for r in conn.execute("PRAGMA table_info(review_items)")}:
+            conn.execute("BEGIN IMMEDIATE")
+            if "context_offset" not in {r[1] for r in conn.execute("PRAGMA table_info(review_items)")}:
+                conn.execute("ALTER TABLE review_items ADD COLUMN context_offset INTEGER")
+            conn.commit()
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(review_items)")}
+        if not {"entity_type", "occurrence_parent"} <= columns:
+            conn.execute("BEGIN IMMEDIATE")
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(review_items)")}
+            if "entity_type" not in columns:
+                conn.execute("ALTER TABLE review_items ADD COLUMN entity_type TEXT NOT NULL DEFAULT 'unknown'")
+            if "occurrence_parent" not in columns:
+                conn.execute("ALTER TABLE review_items ADD COLUMN occurrence_parent INTEGER")
+            conn.commit()
+        conn.execute("""CREATE TABLE IF NOT EXISTS review_candidates (
+            item_id INTEGER NOT NULL, fingerprint TEXT NOT NULL, payload_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(item_id, fingerprint))""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS review_anchors (
+            item_id INTEGER NOT NULL, fingerprint TEXT NOT NULL, payload_json TEXT NOT NULL,
+            PRIMARY KEY(item_id, fingerprint))""")
+        return conn
+
+    # ==================== Enqueue ====================
+
+    def enqueue(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        """Insert items; duplicates (same file/pair/domain/line and occurrence in
+        ANY status) are skipped so re-runs never re-ask an answered question.
+        Returns {added: [ids], skipped_duplicates: int, skipped_temp: int,
+        rejected_unanchored: [{original, file, reason}], repaired_hints:
+        [{original, from, to}]}. Anchor-verbatim validation applies to all
+        sources EXCEPT stage1_deferred (whose from_text is the engine's
+        evolving text and legitimately need not appear in the input file)."""
+        added: list[int] = []
+        skipped_dup = 0
+        merged_candidates: list[dict[str, int]] = []
+        skipped_temp = 0
+        rejected_unanchored: list[dict[str, Any]] = []
+        repaired_hints: list[dict[str, Any]] = []
+        anchor_cache: dict[str, Optional[str]] = {}  # path -> file content (read once per file)
+        consolidated: set[str] = set()
+        with self._connect() as conn:
+            for raw in items:
+                item = self._normalize(raw)
+                if item["file_path"] and is_temp_path(item["file_path"]):
+                    # A temp-dir anchor is dead by the time anyone reviews it.
+                    skipped_temp += 1
+                    continue
+                # Verbatim-anchor validation: an item whose original/context is
+                # not literally in its file NOW can never survive the fail-closed
+                # anchor guard at resolve time — so it would die later, in the
+                # reviewer's hands (dashboard W/A) instead of the author's.
+                # Reject it HERE, loudly. (Real incident 2026-08-03: an agent
+                # enqueued a paraphrased context; the human's override was
+                # refused at re-anchor and the item had to be repaired by hand.)
+                # Engine-generated deferrals (source=stage1_deferred) are exempt:
+                # their from_text is the engine's EVOLVING text (earlier rules
+                # already applied in-memory), which legitimately need not appear
+                # verbatim in the input file — the guard owns their fate.
+                reason = None
+                if item["file_path"]:
+                    fp = item["file_path"]
+                    if fp not in anchor_cache:
+                        anchor_cache[fp] = self._read_anchor_source(fp)
+                    if anchor_cache[fp] is not None:
+                        item["_file_fingerprint"] = hashlib.sha256(anchor_cache[fp].encode()).hexdigest()
+                    if item["source"] != "stage1_deferred":
+                        reason = self._check_anchor_verbatim(item, anchor_cache[fp])
+                    if fp not in consolidated:
+                        self._consolidate_file(conn, fp, anchor_cache[fp])
+                        consolidated.add(fp)
+                # Keep the historical pair/line bucket, then compare occurrence
+                # anchors. Different snippets on one line are not one question.
+                candidates = conn.execute(
+                    """SELECT * FROM review_items
+                       WHERE COALESCE(file_path,'') = COALESCE(?,'')
+                         AND original_text = ?
+                         AND domain = ?
+                         AND occurrence_parent IS NULL
+                       """,
+                    (item["file_path"], item["original_text"], item["domain"]),
+                ).fetchall()
+                # An old no-offset report may represent an unresolved bag of
+                # several slots. Replaying that EXACT proposal is the same
+                # open question, not evidence that it denotes one body span.
+                # Do not refresh its coordinates/fingerprint or merge a new
+                # proposal into it through this formal-retry branch.
+                proposal_json = self._candidate_json(item)
+                proposal_fp = hashlib.sha256(proposal_json.encode()).hexdigest()
+                legacy_retry = next((row for row in candidates
+                    if row["status"] == PENDING and row["context_offset"] is None
+                    and item["context_offset"] is None and item["line_number"] == row["line_number"]
+                    and item["context_snippet"] == row["context_snippet"]
+                    and (row["context_snippet"] or "").count(item["original_text"]) > 1
+                    and conn.execute("SELECT 1 FROM review_candidates WHERE item_id=? AND fingerprint=?",
+                                     (row["id"], proposal_fp)).fetchone()), None)
+                if legacy_retry is not None:
+                    skipped_dup += 1
+                    continue
+                duplicate = next((row for row in candidates if any(self._same_occurrence(
+                    item, anchor, anchor_cache.get(item["file_path"])) for anchor in
+                    self._identity_anchors(conn, row))), None)
+                if duplicate is not None:
+                    self._store_anchor(conn, duplicate["id"], dict(duplicate))
+                    self._store_anchor(conn, duplicate["id"], item)
+                    if not conn.execute("SELECT 1 FROM review_candidates WHERE item_id=? LIMIT 1", (duplicate["id"],)).fetchone():
+                        self._store_candidate(conn, duplicate["id"], dict(duplicate))
+                    changed = self._store_candidate(conn, duplicate["id"], item)
+                    if changed:
+                        merged_candidates.append({"id": duplicate["id"]})
+                        self._audit(conn, "review_candidate_attach", duplicate["id"], None,
+                                    {"suggested": item["suggested_text"], "source": item["source"]})
+                    if duplicate["status"] == PENDING and item["context_snippet"] and anchor_cache.get(item["file_path"]):
+                        content = anchor_cache[item["file_path"]]
+                        if item["context_snippet"] in content:
+                            # Both independently located the same span above.
+                            # Keep the old anchor in append-only audit before
+                            # refreshing the live slot to current verbatim text.
+                            try:
+                                position = self._occurrence_position(content, item)
+                            except ReAnchorNeeded:
+                                skipped_dup += 1
+                                continue
+                            line = content[:position].count("\n") + 1
+                            previous = {k: duplicate[k] for k in ("line_number", "context_snippet", "context_offset")}
+                            current = {"line_number": line, "context_snippet": item["context_snippet"], "context_offset": item["context_offset"]}
+                            if previous != current:
+                                conn.execute("UPDATE review_items SET line_number=?, context_snippet=?, context_offset=? WHERE id=?",
+                                             (line, item["context_snippet"], item["context_offset"], duplicate["id"]))
+                                self._audit(conn, "review_occurrence_reanchor", duplicate["id"], None,
+                                            {"before": previous, "after": current})
+                    skipped_dup += 1
+                    continue
+                if reason:
+                    rejected_unanchored.append({
+                        "original": item["original_text"][:80],
+                        "file": item["file_path"], "reason": reason,
+                    })
+                    continue
+                if item.get("_hint_repaired_to") is not None:
+                    # Report only for items actually enqueued — a dedup-skipped
+                    # item must not claim its hint was "repaired" (it wasn't).
+                    repaired_hints.append({
+                        "original": item["original_text"][:80],
+                        "from": raw.get("line") or raw.get("line_number"),
+                        "to": item["_hint_repaired_to"],
+                    })
+                cur = conn.execute(
+                    """INSERT INTO review_items
+                       (source, domain, file_path, line_number, context_snippet,
+                        original_text, suggested_text, kind, evidence, actions_json, priority,
+                        context_offset, entity_type)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        item["source"], item["domain"], item["file_path"],
+                        item["line_number"], item["context_snippet"],
+                        item["original_text"], item["suggested_text"], item["kind"],
+                        item["evidence"], json.dumps(item["actions"], ensure_ascii=False),
+                        item["priority"], item["context_offset"], item["entity_type"],
+                    ),
+                )
+                item_id = cur.lastrowid
+                added.append(item_id)
+                self._store_candidate(conn, item_id, item)
+                self._store_anchor(conn, item_id, item)
+                self._audit(conn, "review_enqueue", item_id, None,
+                            {"source": item["source"], "domain": item["domain"],
+                             "original": item["original_text"][:80]})
+            conn.commit()
+        return {"added": added, "skipped_duplicates": skipped_dup, "skipped_temp": skipped_temp,
+                "rejected_unanchored": rejected_unanchored, "repaired_hints": repaired_hints,
+                "merged_candidates": merged_candidates}
+
+    @staticmethod
+    def _store_anchor(conn, item_id: int, item: dict[str, Any]) -> None:
+        payload = {k: item.get(k) for k in ("original_text", "line_number", "context_snippet", "context_offset", "_file_fingerprint")}
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        conn.execute("INSERT OR IGNORE INTO review_anchors VALUES (?, ?, ?)",
+                     (item_id, hashlib.sha256(serialized.encode()).hexdigest(), serialized))
+
+    @staticmethod
+    def _identity_anchors(conn, row) -> list[dict[str, Any]]:
+        current = dict(row)
+        # Current verdict metadata belongs to the item, even when considering
+        # an older anchor. A historical coordinate is not a frozen verdict.
+        return [current, *[{**current, **json.loads(r[0])} for r in conn.execute(
+            "SELECT payload_json FROM review_anchors WHERE item_id=?", (row["id"],))]]
+
+    @staticmethod
+    def _candidate_json(item: dict[str, Any]) -> str:
+        payload = {key: item.get(key) for key in (
+            "source", "suggested_text", "kind", "entity_type", "evidence", "provenance")}
+        payload["actions"] = item.get("actions", json.loads(item.get("actions_json") or "[]"))
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    @staticmethod
+    def _store_candidate(conn, item_id: int, item: dict[str, Any]) -> bool:
+        """Append distinct proposals; never replace a suggestion, evidence or action pack."""
+        serialized = ReviewQueue._candidate_json(item)
+        fingerprint = hashlib.sha256(serialized.encode()).hexdigest()
+        return bool(conn.execute("INSERT OR IGNORE INTO review_candidates VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                                 (item_id, fingerprint, serialized)).rowcount)
+
+    @staticmethod
+    def _same_occurrence(item: dict[str, Any], row: sqlite3.Row,
+                         content: Optional[str]) -> bool:
+        """Compare recorded identity first, including decided rows after edits.
+
+        A legacy anchor lacking context is not a wildcard over all same-line
+        occurrences. Only merge differing contexts when both locate one span.
+        """
+        same_record = (item["line_number"] == row["line_number"]
+                and (item["context_snippet"] or "") == (row["context_snippet"] or "")
+                and item["context_offset"] == row["context_offset"])
+        prior = dict(row)
+        if same_record and content is None:
+            return item.get("suggested_text") == prior.get("suggested_text")
+        if same_record and prior.get("_file_fingerprint") == hashlib.sha256(content.encode()).hexdigest():
+            return True
+        if content is None:
+            return False
+        masked, _ = _mask_ledger_spans(content)
+        # A decided retry after an edit needs the actual applied form at that
+        # recorded slot. Equal old coordinates alone do not prove a retry.
+        resolved = prior.get("resolved_text")
+        if same_record and prior.get("status") in ("accepted", "overridden") and resolved:
+            try:
+                focused = ReviewQueue._focused_context(row["original_text"], row["context_snippet"], row["context_offset"])
+                applied = focused.replace(row["original_text"], resolved, 1) if focused and focused.count(row["original_text"]) == 1 else None
+                if applied and focused not in masked and masked.count(applied) == 1:
+                    return True
+            except ReAnchorNeeded:
+                pass
+        try:
+            positions = [ReviewQueue._occurrence_position(masked, anchor) for anchor in (item, row)]
+        except ReAnchorNeeded:
+            return False
+        return positions[0] == positions[1]
+
+    @staticmethod
+    def _occurrence_position(content: str, anchor) -> int:
+        old, snippet, offset = anchor["original_text"], anchor["context_snippet"], anchor["context_offset"]
+        focused = ReviewQueue._focused_context(old, snippet, offset)
+        try:
+            if not focused or focused.count(old) != 1:
+                raise ReAnchorNeeded("occurrence has no unambiguous context")
+            matches = list(re.finditer(re.escape(focused), content))
+            if len(matches) != 1:
+                raise ReAnchorNeeded("occurrence context is not globally unique")
+            return matches[0].start() + focused.index(old)
+        except ReAnchorNeeded:
+            # Identity recovery only: an unchanged, substantial neighbour must
+            # identify ONE slot in the entire file. Never use edit distance or
+            # the nearest line to equate competing same-line occurrences.
+            if not focused or focused.count(old) != 1:
+                raise
+            before, after = focused.split(old)
+            probes = [part for part in (before[-32:] + old if len(before) >= 6 else "",
+                                       old + after[:32] if len(after) >= 6 else "") if part]
+            hits = set()
+            for probe in probes:
+                occurrences = [m.start() for m in re.finditer(re.escape(probe), content)]
+                if len(occurrences) == 1:
+                    hits.add(occurrences[0] + (len(probe) - len(old) if probe.endswith(old) else 0))
+            if len(hits) == 1:
+                return hits.pop()
+            raise ReAnchorNeeded("occurrence identity is ambiguous after context drift")
+
+    def _consolidate_file(self, conn, file_path: str, content: Optional[str]) -> dict:
+        """Link legacy rows only when their current slots are independently unique.
+
+        Keep every old id, action pack and verdict. Ambiguous no-offset anchors
+        are reported, never assigned to the first matching occurrence.
+        """
+        result = {"linked": [], "ambiguous_ids": [], "verdict_conflicts": []}
+        if content is None:
+            return result
+        masked, _ = _mask_ledger_spans(content)
+        slots: dict[tuple, sqlite3.Row] = {}
+        rows = conn.execute("SELECT * FROM review_items WHERE file_path = ? AND occurrence_parent IS NULL ORDER BY id",
+                            (file_path,)).fetchall()
+        for row in rows:
+            try:
+                position = self._occurrence_position(masked, row)
+            except ReAnchorNeeded:
+                result["ambiguous_ids"].append(row["id"])
+                continue
+            key = (row["domain"], row["original_text"], position)
+            parent = slots.get(key)
+            if parent is None:
+                slots[key] = row
+                continue
+            if parent["status"] != PENDING or row["status"] != PENDING:
+                # Decided records are not rewritten by a schema upgrade.
+                result["verdict_conflicts"].append([parent["id"], row["id"]])
+                continue
+            self._store_candidate(conn, parent["id"], dict(parent))
+            self._store_candidate(conn, parent["id"], dict(row))
+            self._store_anchor(conn, parent["id"], dict(parent))
+            self._store_anchor(conn, parent["id"], dict(row))
+            for proposal in conn.execute("SELECT * FROM review_candidates WHERE item_id = ?", (row["id"],)).fetchall():
+                conn.execute("INSERT OR IGNORE INTO review_candidates VALUES (?, ?, ?, ?)",
+                             (parent["id"], proposal["fingerprint"], proposal["payload_json"], proposal["created_at"]))
+            conn.execute("UPDATE review_items SET occurrence_parent = ? WHERE id = ?", (parent["id"], row["id"]))
+            self._audit(conn, "review_occurrence_link", row["id"], None, {"parent_id": parent["id"]})
+            result["linked"].append({"id": row["id"], "parent_id": parent["id"]})
+        return result
+
+    def consolidate(self, file_path: str) -> dict:
+        path = str(Path(file_path).resolve())
+        with self._connect() as conn:
+            result = self._consolidate_file(conn, path, self._read_anchor_source(path))
+            conn.commit()
+        return {"file_path": path, **result}
+
+    @staticmethod
+    def _focused_context(old: str, snippet: Optional[str], offset: Optional[int]) -> Optional[str]:
+        """Keep the selected slot's neighbours without any sibling old token.
+
+        This lets independently queued same-line edits survive one another.
+        Repeated/overlapping neighbourhoods remain ambiguous at the locator.
+        """
+        if offset is None or not snippet:
+            return snippet
+        positions = [m.start() for m in re.finditer("(?=" + re.escape(old) + ")", snippet)]
+        before = [p + len(old) for p in positions if p < offset]
+        after = [p for p in positions if p > offset]
+        lo, hi = max(before, default=0), min(after, default=len(snippet))
+        if lo > offset or hi < offset + len(old):
+            raise ReAnchorNeeded("overlapping context_offset anchors need a non-overlapping context")
+        focused = snippet[lo:hi]
+        if focused.strip() == old:
+            raise ReAnchorNeeded("context_offset has no surviving neighbours to identify this occurrence")
+        return focused
+
+    @staticmethod
+    def _read_anchor_source(path_str: str) -> Optional[str]:
+        """Read a candidate anchor file once; None = unreadable/missing (the
+        resolve-time guard owns that case, e.g. items for a file elsewhere)."""
+        path = Path(path_str)
+        if not path.is_file():
+            return None
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                return f.read()
+        except (OSError, UnicodeError):
+            return None
+
+    @staticmethod
+    def _check_anchor_verbatim(item: dict[str, Any], content: Optional[str]) -> Optional[str]:
+        """Return a rejection reason when the item's anchor is not verbatim in
+        its file; None when valid — or when the file is unreadable/missing
+        (that case stays the resolve-time guard's job, e.g. items enqueued for
+        a file on another machine). Side effect: a stale line hint pointing at
+        the wrong line is repaired to the UNIQUE matching line."""
+        if content is None:
+            return None
+        original = item["original_text"]
+        if original not in content:
+            return ("original 不在文件里 —— original 必须从文件逐字复制；"
+                    "转述/改写会让 resolve 时被 fail-closed 拦下（修正 item 后重新 enqueue）")
+        if item["line_number"] is not None:
+            hits = [i + 1 for i, ln in enumerate(content.splitlines()) if original in ln]
+            if hits and item["line_number"] not in hits and len(hits) == 1:
+                # Only repair a hint that would actually break resolve: a hint
+                # within RESOLVE_WINDOW_LINES of the unique match works fine
+                # as-is and must NOT be rewritten (rewriting a functional hint
+                # silently broke dashboard context fallback,
+                # tests/test_dashboard_context.py:150).
+                if abs(hits[0] - item["line_number"]) > RESOLVE_WINDOW_LINES:
+                    item["_hint_repaired_to"] = hits[0]
+                    item["line_number"] = hits[0]
+        snippet = item["context_snippet"]
+        if snippet and snippet.strip() and snippet not in content:
+            return ("context 不在文件里（非逐字）—— context 必须整段从文件复制；"
+                    "写转述 = anchor 必漂（修正 item 后重新 enqueue）")
+        return None
+
+    # ==================== Re-anchor ====================
+
+    def reanchor(self, item_id: int, search_roots: Optional[list[str]] = None,
+                 reanchor_to: Optional[str] = None,
+                 context_offset: Optional[int] = None) -> dict[str, Any]:
+        """Repair a pending item's anchor after its transcript drifted or moved.
+
+        Two drift shapes, both repaired against CURRENT disk state:
+        1. file exists but line/context went stale (edits since enqueue):
+           re-locate `original_text` in the file (nearest to the old hint) and
+           refresh line_number + context_snippet to the verbatim current line.
+        2. file is gone (moved/renamed/cleaned): search the recorded parent dir
+           plus any `search_roots` for *.md files containing `original_text`;
+           exactly one candidate re-points file_path to it. When search is
+           ambiguous, `reanchor_to` names the target file explicitly (the
+           caller's judgment), and is itself refused if `original_text` is not
+           in it.
+        Fail-closed throughout: no match or an ambiguous match changes nothing.
+        """
+        item = self.get(item_id)
+        if item is None:
+            raise ReviewQueueError(f"review item {item_id} not found")
+        if item.status != "pending":
+            raise ReviewQueueError(
+                f"item {item_id} is {item.status} — only pending items can be re-anchored")
+        if not item.file_path:
+            raise ReviewQueueError(f"item {item_id} has no file anchor")
+        if context_offset is not None:
+            # Repair an ambiguous legacy row without replacing its identity or
+            # verdict history. The supplied slot is relative to its RECORDED
+            # snippet, and must survive the normal current-file anchor checks.
+            self._validate_context_offset(item.original_text, item.context_snippet, context_offset)
+            item.context_offset = context_offset
+
+        path = Path(item.file_path)
+        repointed = False
+        if reanchor_to:
+            explicit = Path(reanchor_to).expanduser().resolve()
+            if not explicit.is_file():
+                raise ReviewQueueError(f"--reanchor-to target not a file: {explicit}")
+            probe = self._read_file(explicit)
+            if item.original_text not in probe:
+                raise ReviewQueueError(
+                    f"original {item.original_text[:60]!r} not in explicit target "
+                    f"{explicit.name} — refusing an unverified re-point")
+            path, content, repointed = explicit, probe, True
+        elif path.is_file():
+            content = self._read_file(path)
+        else:
+            hits = self._find_original_elsewhere(item.original_text, path, search_roots or [])
+            if len(hits) == 1:
+                path, _ = hits[0]
+                content = self._read_file(path)
+                repointed = True
+            elif not hits:
+                roots = [str(path.parent)] + [str(r) for r in (search_roots or [])]
+                raise ReviewQueueError(
+                    f"file gone and original not found under {roots} — pass "
+                    f"--reanchor-to <path> if the transcript moved; if the utterance "
+                    f"is gone, close the row with --decision skipped --note <why> "
+                    f"(kept_original asserts the transcript keeps the original form)")
+            else:
+                raise ReviewQueueError(
+                    f"file gone and original found in {len(hits)} files — ambiguous, "
+                    f"pass --reanchor-to <one of: "
+                    + ", ".join(str(h[0]) for h in hits[:5]) + ">")
+
+        # Ledger-masked FIRST: an `asr_note` line quotes old forms on purpose
+        # ("修正含：<旧形>→<正确形>"), so an unmasked search re-points the row
+        # at the ledger itself — 2026-09-20 #1107 re-anchored onto the asr_note
+        # line and the next accept edited the audit trail. The mask preserves
+        # line count, so line numbers below stay valid.
+        masked, _ = _mask_ledger_spans(content)
+        masked_lines = masked.splitlines()
+        lines = content.splitlines()
+        matches = [i + 1 for i, ln in enumerate(masked_lines) if item.original_text in ln]
+        focused = self._focused_context(item.original_text, item.context_snippet, item.context_offset)
+        verdict = self._already_applied_verdict(
+            masked, item.original_text, item.suggested_text or "",
+            focused, item.line_number, selected_slot=item.context_offset is not None)
+        if verdict.hit_lines:
+            # The recorded context already reads with the suggestion: this
+            # row's fix is in place. Re-locating the ORIGINAL would re-point
+            # the row at a different utterance and a later accept would edit
+            # that one under this row's id (observed in review, 2026-09-05).
+            raise ReviewQueueError(
+                f"this row's recorded context already reads with "
+                f"{(item.suggested_text or '')[:60]!r} at line(s) {verdict.hit_lines} — "
+                f"nothing to re-anchor: resolve it with --resolve-review {item_id} "
+                f"--decision accepted (recorded without writing once no look-alike "
+                f"near the hint still carries the original). "
+                + (f"The original at line(s) {matches} belongs to other utterances: "
+                   f"enqueue those separately or fix them by hand. " if matches else "")
+                + f"If "
+                f"line(s) {verdict.hit_lines} is not the utterance this row meant, "
+                f"close the row with --decision skipped --note <why> and enqueue "
+                f"the garbled one afresh")
+        if not matches:
+            raise ReviewQueueError(
+                f"original {item.original_text[:60]!r} no longer in {path.name} — "
+                f"nothing to re-anchor to. A fix already applied by hand is recorded "
+                f"by --resolve-review {item_id} --decision accepted (no write); an "
+                f"utterance that is gone closes with --decision skipped --note <why>. "
+                f"kept_original asserts the transcript keeps the original form")
+        # Disambiguate with the RECORDED context first (it is the best evidence
+        # for WHICH occurrence the item meant) — picking purely by distance and
+        # then overwriting context_snippet with the chosen line would feed the
+        # resolve-time guard a fabricated right answer for the wrong occurrence.
+        old_snippet = (focused or "").strip()
+        if old_snippet and len(matches) > 1:
+            probe = old_snippet[:80]
+            ctx_matches = [
+                m for m in matches
+                if lines[m - 1].strip()[:80] in probe or probe in lines[m - 1]
+            ]
+            if len(ctx_matches) == 1:
+                matches = ctx_matches
+            # 0 or >1 context matches: fall through to distance — the context
+            # itself may be the drifted part; distance is the remaining signal.
+        old_hint = item.line_number if item.line_number is not None else matches[0]
+        ordered = sorted(matches, key=lambda h: (abs(h - old_hint), h))
+        if len(ordered) > 1 and abs(ordered[0] - old_hint) == abs(ordered[1] - old_hint):
+            # Same standard as the resolve-time guard: an equidistant tie has
+            # no honest winner. Overwriting context_snippet here would
+            # fabricate one — refuse instead.
+            raise ReviewQueueError(
+                f"two occurrences are equally near the old hint "
+                f"(lines {ordered[0]} and {ordered[1]}) — ambiguous; "
+                f"re-enqueue with a discriminating context")
+        line_no = ordered[0]
+        new_context = lines[line_no - 1].strip()
+        # Retain within-line identity when replacing a snippet with the current
+        # whole line. Never reset a selected second slot to the first one.
+        try:
+            position = self._locate_anchor(
+                masked, item.original_text, line_no, focused, window=0,
+                require_exact_context=item.context_offset is not None)
+        except ReAnchorNeeded:
+            if item.context_offset is not None:
+                raise
+            # Legacy re-anchor may repair drifted context, but only if the
+            # selected line has one occurrence; repeated tokens need evidence.
+            position = self._locate_anchor(masked, item.original_text, line_no, None, window=0)
+        line_start = sum(len(ln) for ln in masked.splitlines(keepends=True)[:line_no - 1])
+        new_offset = position - line_start - (len(lines[line_no - 1]) - len(lines[line_no - 1].lstrip()))
+        proposed = {"original_text": item.original_text, "line_number": line_no,
+                    "context_snippet": new_context, "context_offset": new_offset,
+                    "_file_fingerprint": hashlib.sha256(content.encode()).hexdigest()}
+        # A re-point must not collide with another pending item's dedup key —
+        # that would strand a permanently unresolvable duplicate in the queue.
+        with self._connect() as conn:
+            collisions = conn.execute(
+                """SELECT * FROM review_items
+                   WHERE id != ?
+                     AND COALESCE(file_path,'') = ?
+                     AND original_text = ?
+                     AND COALESCE(suggested_text,'') = COALESCE(?, '')
+                     AND domain = ?
+                     AND COALESCE(line_number,-1) = ?
+                   """,
+                (item_id, str(path), item.original_text, item.suggested_text,
+                 item.domain, line_no),
+            ).fetchall()
+            collision = next((row for row in collisions
+                              if any(self._same_occurrence(proposed, anchor, content)
+                                     for anchor in self._identity_anchors(conn, row))
+                              or (not row["context_snippet"] and row["context_offset"] is None
+                                  and lines[line_no - 1].count(item.original_text) == 1)), None)
+            if collision:
+                raise ReviewQueueError(
+                    f"re-anchor would collide with item #{collision['id']} "
+                    f"(same file/original/suggested/domain/occurrence) — resolve or skip "
+                    f"that one first")
+            # Mirror resolve's concurrency guard: never overwrite an anchor of
+            # an item whose verdict landed between our get() and now.
+            cur = conn.execute(
+                """UPDATE review_items SET file_path=?, line_number=?, context_snippet=?, context_offset=?
+                   WHERE id=? AND status='pending'""",
+                (str(path), line_no, new_context, new_offset, item_id))
+            if cur.rowcount != 1:
+                raise ReviewQueueError(
+                    f"item {item_id} changed status while re-anchoring — re-read and retry")
+            self._store_anchor(conn, item_id, proposed)
+            # Explicit action packs carry their own file paths/line hints.
+            # file_edit.expect_line must follow ANY line move — not just
+            # re-points: a stale expect_line OUTRANKS item.line_number at
+            # resolve, so leaving it creates a reanchor✅/resolve🛑 ping-pong.
+            if item.actions and (repointed or line_no != item.line_number):
+                new_actions = []
+                for action in item.actions:
+                    a = dict(action)
+                    if a.get("type") == "file_edit" and "path" in a:
+                        if repointed:
+                            a["path"] = str(path)
+                        if repointed or a.get("expect_line") is not None:
+                            a["expect_line"] = line_no
+                    elif a.get("type") == "append_note" and "path" in a and repointed:
+                        a["path"] = str(path)
+                    new_actions.append(a)
+                conn.execute(
+                    "UPDATE review_items SET actions_json=? WHERE id=?",
+                    (json.dumps(new_actions, ensure_ascii=False), item_id))
+            self._audit(conn, "review_reanchor", item_id, None,
+                        {"file": str(path), "line": line_no, "repointed": repointed})
+            conn.commit()
+        return {"id": item_id, "file_path": str(path), "line_number": line_no,
+                "context_snippet": new_context, "context_offset": new_offset,
+                "file_repointed": repointed}
+
+    def attach_evidence(self, item_id: int, text: str,
+                        by: Optional[str] = None) -> str:
+        """Append an authority citation to an item's evidence, audited.
+
+        The name-convergence guard reads the evidence column, and until this
+        existed that column was write-once at enqueue: a verdict reached with
+        later knowledge (an audio check, a user ruling in review) had no way
+        to name its authority, and the gate refused the write — 2026-09-20,
+        67 live rows sat in exactly that deadlock (reopen/re-resolve keeps the
+        row pending; the only channel that could claim the target, --add, is
+        itself blocked by the pending-conflict guard). The citation is
+        APPENDED (never replaces what the enqueuing agent recorded) and every
+        append is an audit_log row, so "who claimed what, when" stays
+        answerable."""
+        text = (text or "").strip()
+        if not text:
+            raise ReviewQueueError("attach_evidence: empty citation")
+        stamp = _utcnow()
+        who = by or "unknown"
+        line = f"[authority {stamp} by {who}] {text}"
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT evidence FROM review_items WHERE id = ?", (item_id,)
+            ).fetchone()
+            if row is None:
+                raise ReviewQueueError(f"review item {item_id} not found")
+            old = row[0] or ""
+            new = f"{old}\n{line}" if old else line
+            conn.execute(
+                "UPDATE review_items SET evidence = ? WHERE id = ?", (new, item_id)
+            )
+            self._audit(conn, "review_evidence_attach", item_id, by,
+                        {"appended": line})
+            conn.commit()
+        return new
+
+    @staticmethod
+    def _find_original_elsewhere(original: str, gone_path: Path,
+                                 search_roots: list[str]) -> list[tuple[Path, int]]:
+        """First hit per *.md file, under the recorded parent dir + search_roots.
+
+        Ambiguity is judged on FILES (one hit per file is enough to re-point);
+        the exact line is re-derived from the winning file afterwards."""
+        roots = [gone_path.parent] + [Path(r).expanduser() for r in search_roots]
+        hits: list[tuple[Path, int]] = []
+        seen_roots: set[Path] = set()
+        seen_files: set[Path] = set()  # overlapping roots must not double-count
+        for root in roots:
+            try:
+                root = root.resolve()
+            except OSError:
+                continue
+            if root in seen_roots or not root.is_dir():
+                continue
+            seen_roots.add(root)
+            for p in root.rglob("*.md"):
+                if any(part in {".git", "node_modules", "__pycache__"} for part in p.parts):
+                    continue
+                try:
+                    rp = p.resolve()
+                except OSError:
+                    continue
+                if rp in seen_files:
+                    continue
+                try:
+                    with open(rp, encoding="utf-8", errors="replace") as f:
+                        raw = f.read()
+                    # The correction ledger quotes old forms on purpose; a file
+                    # whose only trace of `original` is its own asr_note is not
+                    # where the utterance lives (2026-09-20 #1107 shape).
+                    masked, _ = _mask_ledger_spans(raw)
+                    for i, ln in enumerate(masked.splitlines(), 1):
+                        if original in ln:
+                            hits.append((rp, i))
+                            seen_files.add(rp)
+                            break
+                except OSError:
+                    continue
+        return hits
+
+    def _normalize(self, raw: dict[str, Any]) -> dict[str, Any]:
+        original = (raw.get("original") or raw.get("original_text") or "").strip("\n")
+        if not original.strip():
+            raise ReviewQueueError("item missing required field: original (non-whitespace)")
+        source = raw.get("source", "manual")
+        if source not in VALID_SOURCES:
+            raise ReviewQueueError(f"invalid source {source!r} (valid: {VALID_SOURCES})")
+        kind = raw.get("kind", "wording")
+        if kind not in VALID_KINDS:
+            raise ReviewQueueError(f"invalid kind {kind!r} (valid: {VALID_KINDS})")
+        actions = raw.get("actions", [])
+        validate_actions(actions)
+        suggested = raw.get("suggested") or raw.get("suggested_text")
+        file_path = raw.get("file") or raw.get("file_path")
+        priority = raw.get("priority")
+        if priority is None:
+            priority = PRIORITY_BY_KIND.get(kind, 0)
+        line_number = raw.get("line") or raw.get("line_number")
+        if line_number is not None:
+            try:
+                line_number = int(line_number)
+            except (TypeError, ValueError):
+                raise ReviewQueueError(f"line must be an integer, got {line_number!r}")
+        snippet = raw.get("context") or raw.get("context_snippet")
+        entity_type = raw.get("entity_type", "unknown")
+        if entity_type not in ("unknown", "person", "system", "product", "organization", "place"):
+            raise ReviewQueueError("entity_type must be unknown, person, system, product, organization or place")
+        provenance = raw.get("provenance")
+        if provenance is not None and not isinstance(provenance, dict):
+            raise ReviewQueueError("provenance must be an object when supplied")
+        offset = raw.get("context_offset")
+        self._validate_context_offset(original, snippet, offset)
+        return {
+            "source": source,
+            "domain": raw.get("domain", "general"),
+            "file_path": str(Path(file_path).resolve()) if file_path else None,
+            "line_number": line_number,
+            "context_snippet": snippet,
+            "context_offset": offset,
+            "original_text": original,
+            "suggested_text": suggested,
+            "kind": kind,
+            "entity_type": entity_type,
+            "provenance": provenance,
+            "evidence": raw.get("evidence"),
+            "actions": actions,
+            "priority": int(priority),
+        }
+
+    @staticmethod
+    def _validate_context_offset(original: str, snippet: Optional[str], offset: Optional[int]) -> None:
+        if offset is not None and (
+            type(offset) is not int or offset < 0 or not isinstance(snippet, str)
+            or snippet[offset:offset + len(original)] != original
+        ):
+            raise ReviewQueueError("context_offset must be a nonnegative integer pointing at original inside context")
+
+    # ==================== Read ====================
+
+    def list_items(
+        self,
+        status: Optional[str] = None,
+        domain: Optional[str] = None,
+        source: Optional[str] = None,
+        file_path: Optional[str] = None,
+        limit: int = 500,
+    ) -> list[ReviewItem]:
+        query = "SELECT * FROM review_items WHERE occurrence_parent IS NULL"
+        params: list[Any] = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if domain:
+            query += " AND domain = ?"
+            params.append(domain)
+        if source:
+            query += " AND source = ?"
+            params.append(source)
+        if file_path:
+            query += " AND file_path = ?"
+            params.append(str(Path(file_path).resolve()))
+        query += " ORDER BY priority DESC, id ASC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_item(r) for r in rows]
+
+    def get(self, item_id: int) -> Optional[ReviewItem]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM review_items WHERE id = ?", (item_id,)
+            ).fetchone()
+        return self._row_to_item(row) if row else None
+
+    def pending_text_conflicts(self, texts: list[str]) -> list[ReviewItem]:
+        """Open (pending) items whose original or suggested text IS one of
+        `texts` (exact match). A dictionary rule written over an open review
+        question short-circuits it — --add refuses while one is open."""
+        uniq = sorted({t for t in texts if t})
+        if not uniq:
+            return []
+        marks = ",".join("?" for _ in uniq)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""SELECT * FROM review_items
+                    WHERE status = ?
+                      AND (original_text IN ({marks}) OR suggested_text IN ({marks}))
+                    ORDER BY id ASC""",
+                [PENDING, *uniq, *uniq],
+            ).fetchall()
+        return [self._row_to_item(r) for r in rows]
+
+    def stats(
+        self,
+        domain: Optional[str] = None,
+        source: Optional[str] = None,
+        file_path: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Return queue totals within one explicit review scope.
+
+        Status is deliberately not a scope input: callers need all status totals
+        for the selected file/domain/source so a human verdict can be read back
+        as pending→decided without falling back to global queue counts.
+        """
+        where = " WHERE occurrence_parent IS NULL"
+        params: list[Any] = []
+        if domain:
+            where += " AND domain = ?"
+            params.append(domain)
+        if source:
+            where += " AND source = ?"
+            params.append(source)
+        if file_path:
+            where += " AND file_path = ?"
+            params.append(str(Path(file_path).resolve()))
+        with self._connect() as conn:
+            by_status = dict(conn.execute(
+                f"SELECT status, COUNT(*) FROM review_items{where} GROUP BY status",
+                params,
+            ).fetchall())
+            pending_by_kind = dict(conn.execute(
+                f"SELECT kind, COUNT(*) FROM review_items{where} AND status = ? GROUP BY kind",
+                [*params, PENDING],
+            ).fetchall())
+            pending_by_domain = dict(conn.execute(
+                f"SELECT domain, COUNT(*) FROM review_items{where} AND status = ? GROUP BY domain",
+                [*params, PENDING],
+            ).fetchall())
+        return {
+            "by_status": by_status,
+            "pending_by_kind": pending_by_kind,
+            "pending_by_domain": pending_by_domain,
+            "pending_total": by_status.get(PENDING, 0),
+        }
+
+    def _row_to_item(self, row: sqlite3.Row) -> ReviewItem:
+        parent_id = row["occurrence_parent"] or row["id"]
+        with self._connect() as conn:
+            candidates = [json.loads(r[0]) for r in conn.execute(
+                "SELECT payload_json FROM review_candidates WHERE item_id = ? ORDER BY created_at, rowid", (parent_id,))]
+        return ReviewItem(
+            id=row["id"],
+            created_at=row["created_at"],
+            source=row["source"],
+            domain=row["domain"],
+            file_path=row["file_path"],
+            line_number=row["line_number"],
+            context_snippet=row["context_snippet"],
+            context_offset=row["context_offset"],
+            entity_type=row["entity_type"],
+            occurrence_parent=row["occurrence_parent"],
+            candidates=candidates,
+            original_text=row["original_text"],
+            suggested_text=row["suggested_text"],
+            kind=row["kind"],
+            evidence=row["evidence"],
+            actions=json.loads(row["actions_json"]) if row["actions_json"] else [],
+            priority=row["priority"],
+            status=row["status"],
+            decided_at=row["decided_at"],
+            decided_by=row["decided_by"],
+            decision_note=row["decision_note"],
+            resolved_text=row["resolved_text"],
+            applied_at=row["applied_at"],
+            apply_log=json.loads(row["apply_log"]) if row["apply_log"] else None,
+        )
+
+    # ==================== Resolve ====================
+
+    def resolve(
+        self,
+        item_id: int,
+        decision: str,
+        override_to: Optional[str] = None,
+        note: Optional[str] = None,
+        by: Optional[str] = None,
+        authority: Optional[str] = None,
+        ledger_entry: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        candidate_index: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Record a decision and (for accepted/overridden) execute the action pack.
+
+        Validate every action against its current file before writing. A bad
+        anchor raises ReAnchorNeeded and records nothing. Authority and verdict
+        share a SQLite transaction; files commit separately, so an abrupt exit
+        can leave a pending item whose anchored edit is already in place.
+        """
+        if decision not in VALID_DECISIONS:
+            raise ReviewQueueError(f"invalid decision {decision!r} (valid: {VALID_DECISIONS})")
+        if entity_type is not None and entity_type not in ("unknown", "person", "system", "product", "organization", "place"):
+            raise ReviewQueueError("invalid entity_type")
+        item = self.get(item_id)
+        if item is None:
+            raise ReviewQueueError(f"review item {item_id} not found")
+        if item.occurrence_parent is not None:
+            raise ReviewQueueError(f"item {item_id} belongs to occurrence #{item.occurrence_parent}; inspect and resolve that item")
+        execution_item = item
+        if candidate_index is not None:
+            if type(candidate_index) is not int or not 0 <= candidate_index < len(item.candidates):
+                raise ReviewQueueError("candidate_index must identify an existing zero-based candidate")
+            candidate = item.candidates[candidate_index]
+            execution_item = replace(item, suggested_text=candidate.get("suggested_text"),
+                                     actions=candidate.get("actions") or [],
+                                     kind=candidate.get("kind", item.kind),
+                                     entity_type=candidate.get("entity_type", "unknown"),
+                                     evidence=candidate.get("evidence"),
+                                     source=candidate.get("source", item.source))
+
+        if decision == "reopen":
+            return self._reopen(item, note=note, by=by)
+
+        if item.status != PENDING:
+            raise ReviewQueueError(
+                f"item {item_id} is {item.status!r}, not pending — "
+                f"use --decision reopen first to change a recorded decision"
+            )
+
+        if ledger_entry is not None and decision not in ("accepted", "overridden"):
+            raise ReviewQueueError("ledger entry requires accepted or overridden")
+        resolved_text: Optional[str] = None
+        if decision == "accepted":
+            if candidate_index is None and len({c["suggested_text"] for c in item.candidates if c.get("suggested_text")}) > 1:
+                raise ReviewQueueError("conflicting candidates for this occurrence; inspect candidates and use overridden --override-to explicitly")
+            if not execution_item.suggested_text:
+                raise ReviewQueueError(
+                    f"item {item_id} has no suggestion to accept — "
+                    "use --decision overridden --override-to TEXT"
+                )
+            resolved_text = execution_item.suggested_text
+        elif decision == "overridden":
+            if not override_to or not override_to.strip():
+                raise ReviewQueueError("--decision overridden requires --override-to TEXT")
+            resolved_text = override_to.strip()
+
+        apply_log: list[dict[str, Any]] = []
+        applied_at: Optional[str] = None
+        try:
+            with self._connect() as conn:
+                # Do not hold a SQLite writer lock while dict_add uses its own
+                # repository connection. Claim pending status conditionally
+                # after action execution; authority shares that transaction.
+                # Abrupt exit after replacement leaves pending + applied text,
+                # which the same anchored resolve can recognise on retry.
+                current = conn.execute("SELECT status FROM review_items WHERE id = ?", (item_id,)).fetchone()
+                if current is None or current[0] != PENDING:
+                    raise ReviewQueueError(f"item {item_id} changed state meanwhile — reload and retry")
+                if resolved_text is not None:
+                    apply_log = self._apply_actions(execution_item, resolved_text,
+                                                    override=decision == "overridden",
+                                                    ledger_entry=ledger_entry)
+                    applied_at = _utcnow()
+                claimed = conn.execute(
+                    """UPDATE review_items
+                       SET status = ?, decided_at = ?, decided_by = ?, decision_note = ?,
+                           resolved_text = ?, applied_at = ?, apply_log = ?
+                       WHERE id = ? AND status = 'pending'""",
+                    (decision, _utcnow(), by, note, resolved_text, applied_at,
+                     json.dumps(apply_log, ensure_ascii=False) if apply_log else None, item_id),
+                )
+                if claimed.rowcount != 1:
+                    raise ReviewQueueError(f"item {item_id} was resolved by another writer meanwhile — reload and retry")
+                if authority:
+                    line = f"[authority {_utcnow()} by {by or 'unknown'}] {authority.strip()}"
+                    conn.execute("UPDATE review_items SET evidence = CASE WHEN evidence IS NULL "
+                                 "OR evidence = '' THEN ? ELSE evidence || char(10) || ? END "
+                                 "WHERE id = ?", (line, line, item_id))
+                    self._audit(conn, "review_evidence_attach", item_id, by, {"appended": line})
+                if entity_type is not None:
+                    conn.execute("UPDATE review_items SET entity_type = ? WHERE id = ?", (entity_type, item_id))
+                self._audit(conn, "review_resolve", item_id, by,
+                            {"decision": decision, "resolved_text": resolved_text,
+                             "actions_applied": len(apply_log), "candidate_index": candidate_index,
+                             "candidate": item.candidates[candidate_index] if candidate_index is not None else None})
+                for sibling in conn.execute("SELECT id, suggested_text FROM review_items WHERE occurrence_parent = ? AND status = 'pending'", (item_id,)).fetchall():
+                    sibling_decision = decision
+                    if resolved_text is not None:
+                        sibling_decision = "accepted" if sibling["suggested_text"] == resolved_text else "overridden"
+                    conn.execute("UPDATE review_items SET status=?, decided_at=?, decided_by=?, decision_note=?, resolved_text=?, apply_log=? WHERE id=?",
+                                 (sibling_decision, _utcnow(), by, f"Occurrence #{item_id}: {note or decision}", resolved_text,
+                                  json.dumps([{"occurrence_parent": item_id}]), sibling["id"]))
+                    self._audit(conn, "review_occurrence_resolve", sibling["id"], by,
+                                {"parent_id": item_id, "decision": sibling_decision, "resolved_text": resolved_text})
+                conn.commit()
+        except Exception as error:
+            # Validation failures have no apply log and changed no files.
+            # Ordinary DB failures roll back the logged edits where their exact
+            # state still matches; never erase concurrent changes to force clean.
+            if apply_log:
+                reverts = self._revert_applied(apply_log)
+                remaining = [r for r in reverts if not r.get("ok")]
+                raise ReviewQueueError(
+                    f"verdict not recorded: {error}; rollback incomplete={bool(remaining)}; "
+                    "read transcript and queue before retrying"
+                ) from error
+            raise
+        result = self.get(item_id)
+        assert result is not None
+        return {"item": result.to_dict(), "apply_log": apply_log,
+                "selected_candidate_index": candidate_index,
+                "selected_candidate": item.candidates[candidate_index] if candidate_index is not None else None}
+
+    def _reopen(self, item: ReviewItem, note: Optional[str], by: Optional[str]) -> dict[str, Any]:
+        """Undo: atomically claim the item back to pending (guarded against a
+        concurrent writer), then revert applied file edits/notes where safely
+        possible. dict_add is NOT auto-reverted (deleting a dictionary rule is
+        a human call) — the log says so explicitly."""
+        if item.status == PENDING:
+            raise ReviewQueueError(f"item {item.id} is already pending")
+        with self._connect() as conn:
+            cur = conn.execute(
+                """UPDATE review_items
+                   SET status = ?, decided_at = NULL, decided_by = NULL, decision_note = ?,
+                       resolved_text = NULL, applied_at = NULL, apply_log = NULL
+                   WHERE id = ? AND status = ?""",
+                (PENDING, note, item.id, item.status),
+            )
+            if cur.rowcount == 0:
+                conn.rollback()
+                raise ReviewQueueError(
+                    f"item {item.id} changed state meanwhile — reload and retry")
+            revert_log = self._revert_applied(item.apply_log or [])
+            conn.execute("UPDATE review_items SET status='pending', decided_at=NULL, decided_by=NULL, decision_note=?, resolved_text=NULL, applied_at=NULL, apply_log=NULL WHERE occurrence_parent=?",
+                         (f"Occurrence #{item.id} reopened", item.id))
+            self._audit(conn, "review_reopen", item.id, by, {"reverts": revert_log})
+            conn.commit()
+        reopened = self.get(item.id)
+        assert reopened is not None
+        return {"item": reopened.to_dict(), "revert_log": revert_log}
+
+    def _revert_applied(self, apply_log: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Best-effort reversal of the actions an apply_log says were executed.
+        Entries marked skipped (append_note found its text pre-existing) are NOT
+        reverted — the action never wrote anything, so removing the line would
+        destroy pre-existing content."""
+        revert_log: list[dict[str, Any]] = []
+        for entry in apply_log:
+            if not entry.get("ok") or entry.get("skipped"):
+                continue
+            action = entry.get("action", {})
+            atype = action.get("type")
+            if atype == "file_edit":
+                path = Path(action["path"])
+                new_text = entry.get("applied_new", action["new"])
+                old_text = action["old"]
+                try:
+                    content = self._read_file(path)
+                    reverted, msg = _revert_one_body_occurrence(
+                        content, new_text, old_text)
+                    if reverted is None:
+                        revert_log.append({"action": action, "ok": False, "msg": msg})
+                    else:
+                        self._write_file(path, reverted)
+                        revert_log.append({"action": action, "ok": True, "msg": "reverted"})
+                except (OSError, ReAnchorNeeded) as e:
+                    revert_log.append({"action": action, "ok": False, "msg": f"not reverted: {e}"})
+            elif atype == "append_note":
+                path = Path(action["path"])
+                try:
+                    content = self._read_file(path)
+                    inserted = entry.get("inserted_text")
+                    if inserted and content.count(inserted) == 1:
+                        self._write_file(path, content.replace(inserted, "", 1))
+                        revert_log.append({"action": action, "ok": True, "msg": "note removed"})
+                    else:
+                        revert_log.append({"action": action, "ok": False,
+                                           "msg": "inserted note not found verbatim — remove manually"})
+                except (OSError, ReAnchorNeeded) as e:
+                    revert_log.append({"action": action, "ok": False, "msg": f"not reverted: {e}"})
+            elif atype == "ledger_note":
+                path = Path(action["path"])
+                try:
+                    content = self._read_file(path)
+                    old_line, new_line = entry["old_line"], entry["new_line"]
+                    if content.count(new_line) != 1:
+                        revert_log.append({"action": action, "ok": False,
+                                           "msg": "ledger changed since acceptance — retained"})
+                    else:
+                        self._write_file(path, content.replace(new_line, old_line, 1))
+                        revert_log.append({"action": action, "ok": True, "msg": "ledger reverted"})
+                except (OSError, ReAnchorNeeded) as e:
+                    revert_log.append({"action": action, "ok": False, "msg": f"not reverted: {e}"})
+            elif atype == "dict_add":
+                revert_log.append({
+                    "action": action, "ok": False,
+                    "msg": "dict_add not auto-reverted — delete the rule manually if wrong "
+                           "(--report-false-positive or repository delete)",
+                })
+        return revert_log
+
+    # ==================== Action execution ====================
+    #
+    # The whole pack is planned IN MEMORY against an evolving snapshot of each
+    # target file — every edit is validated against the content as previous
+    # actions in the same pack left it — and only when every action planned
+    # successfully does anything reach disk (one write per file). A validation
+    # failure therefore leaves the filesystem byte-identical: the two-phase
+    # promise holds even for packs whose actions interact.
+
+    def _apply_actions(
+        self, item: ReviewItem, resolved_text: str, override: bool,
+        ledger_entry: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Plan ALL actions in memory, then write. Fail closed: any validation
+        error leaves every file untouched.
+
+        On override, file_edit actions are retargeted to the human's text;
+        dict_add / append_note actions are SKIPPED (they were planned for the
+        suggestion, not the override — a human override needs a fresh plan).
+        """
+        actions = list(item.actions or [])
+        if not actions and item.suggested_text and item.file_path and not override:
+            # Convenience default: an item with a file anchor but no explicit
+            # pack means "replace original with suggestion in that file".
+            actions = [{
+                "type": "file_edit", "path": item.file_path,
+                "old": item.original_text, "new": item.suggested_text,
+            }]
+        if override:
+            # Retarget file edits to what the human actually typed; drop
+            # suggestion-specific actions unconditionally.
+            #
+            # The drop must NOT be gated on item.file_path. dict_add and
+            # append_note were planned around the suggestion the human just
+            # rejected, so executing them writes the rejected answer — and a
+            # dictionary rule then auto-applies it to every future transcript
+            # in that domain. An item with such an action and no file anchor
+            # used to skip this whole block and do exactly that, reporting
+            # "dictionary rule added" as if it had succeeded.
+            retargeted = [
+                {**a, "new": resolved_text}
+                for a in actions
+                if a["type"] == "file_edit"
+            ]
+            if not retargeted and item.file_path:
+                retargeted = [{
+                    "type": "file_edit", "path": item.file_path,
+                    "old": item.original_text, "new": resolved_text,
+                }]
+            # No file edit to perform: the verdict is still recorded, and the
+            # human's text is in resolved_text for a deliberate --add.
+            actions = retargeted
+
+        # Phase 1: plan everything against in-memory content.
+        contents: dict[Path, str] = {}
+        originals: dict[Path, str] = {}
+        dirty: set[Path] = set()
+        planned: list[dict[str, Any]] = []
+        for action in actions:
+            atype = action["type"]
+            if atype == "file_edit":
+                path = Path(action["path"]).resolve()
+                content = self._load(contents, path)
+                originals.setdefault(path, content)
+                new_content, applied_new = self._plan_file_edit(content, action, item)
+                if new_content is None:
+                    planned.append({
+                        "action": action, "mode": "skip_already_present",
+                        "msg": "already in place at the anchor — recorded without writing",
+                    })
+                    continue
+                contents[path] = new_content
+                dirty.add(path)
+                planned.append({"action": action, "mode": "file_edit",
+                                "path": path, "applied_new": applied_new})
+            elif atype == "append_note":
+                path = Path(action["path"]).resolve()
+                content = self._load(contents, path)
+                originals.setdefault(path, content)
+                new_content, inserted = self._plan_append_note(content, action)
+                if new_content is None:
+                    planned.append({"action": action, "mode": "skip_already_present"})
+                else:
+                    contents[path] = new_content
+                    dirty.add(path)
+                    planned.append({"action": action, "mode": "append_note",
+                                    "path": path, "inserted_text": inserted})
+            elif atype == "dict_add":
+                if self.dict_add_fn is None:
+                    raise ReviewQueueError(
+                        "action pack contains dict_add but no dict_add handler was "
+                        "wired in — resolve via the CLI, which injects it"
+                    )
+                planned.append({"action": action, "mode": "dict_add"})
+
+        if ledger_entry is not None:
+            if not item.file_path:
+                raise ReviewQueueError("--ledger-entry requires a transcript file anchor")
+            expected_pair = f"{item.original_text}→{resolved_text}"
+            if (not isinstance(ledger_entry, str) or not ledger_entry.startswith(expected_pair)
+                    or (ledger_entry[len(expected_pair):]
+                        and ledger_entry[len(expected_pair)] not in "（( [【；;")):
+                raise ReviewQueueError(f"ledger entry must start with the actual resolved pair: {expected_pair}")
+            path = Path(item.file_path).resolve()
+            content = self._load(contents, path)
+            originals.setdefault(path, content)
+            new_content, old_line, new_line = self._plan_ledger_entry(content, ledger_entry)
+            action = {"type": "ledger_note", "path": str(path)}
+            if new_content == content:
+                planned.append({"action": action, "mode": "skip_already_present"})
+            else:
+                contents[path] = new_content
+                dirty.add(path)
+                planned.append({"action": action, "mode": "ledger_note",
+                                "old_line": old_line, "new_line": new_line})
+
+        # Phase 2: write each dirty file once, then run dictionary adds.
+        written: list[Path] = []
+        try:
+            for path in dirty:
+                self._write_file(path, contents[path])
+                written.append(path)
+                if self._read_file(path) != contents[path]:
+                    raise ReviewQueueError(f"file readback mismatch: {path}")
+        except Exception as error:
+            incomplete = []
+            for path in reversed(written):
+                if self._read_file(path) != contents[path]:
+                    incomplete.append(str(path))
+                    continue
+                self._write_file(path, originals[path])
+            raise ReviewQueueError(f"file write failed: {error}; rollback incomplete={incomplete}") from error
+        log: list[dict[str, Any]] = []
+        for plan in planned:
+            action = plan["action"]
+            mode = plan["mode"]
+            if mode == "skip_already_present":
+                # skipped=True keeps _revert_applied from removing a line this
+                # action never wrote (it was pre-existing content).
+                log.append({"action": action, "ok": True, "skipped": True,
+                            "msg": plan.get("msg", "already present — skipped")})
+            elif mode == "file_edit":
+                log.append({"action": action, "ok": True, "applied_new": plan["applied_new"],
+                            "msg": f"replaced in {plan['path'].name}"})
+            elif mode == "append_note":
+                log.append({"action": action, "ok": True, "inserted_text": plan["inserted_text"],
+                            "msg": f"note appended to {plan['path'].name}"})
+            elif mode == "ledger_note":
+                log.append({"action": action, "ok": True, "old_line": plan["old_line"],
+                            "new_line": plan["new_line"], "msg": "correction ledger updated"})
+            elif mode == "dict_add":
+                assert self.dict_add_fn is not None
+                self.dict_add_fn(
+                    action["from"], action["to"], action["domain"],
+                    f"confirmed via review queue item #{item.id}",
+                )
+                log.append({"action": action, "ok": True,
+                            "msg": f"dictionary rule added ({action['domain']})"})
+        return log
+
+    # ---- file IO (newline-preserving) ----
+    # newline='' disables universal-newline translation both ways, so accepting
+    # one correction never silently rewrites a CRLF transcript to LF (or back).
+
+    @staticmethod
+    def _read_file(path: Path) -> str:
+        if not path.exists():
+            raise ReAnchorNeeded(
+                f"file gone: {path} — the transcript moved since enqueue; "
+                f"run `fix_transcription.py --reanchor-review <id> [--reanchor-root DIR]` "
+                f"to repair the anchor, or close the row with --decision skipped "
+                f"--note <why> if the utterance is gone"
+            )
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            return f.read()
+
+    @staticmethod
+    def _write_file(path: Path, content: str) -> None:
+        # Replace one complete file so body and its ledger cannot be torn into
+        # separate writes. SQLite still commits separately; see resolve recovery.
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="",
+                                             dir=path.parent, delete=False) as f:
+                temporary = Path(f.name)
+                os.chmod(temporary, path.stat().st_mode & 0o777)
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary is not None and temporary.exists():
+                temporary.unlink()
+
+    @staticmethod
+    def _plan_ledger_entry(content: str, entry: str) -> tuple[str, str, str]:
+        """Append to an existing single-line YAML asr_note, preserving body bytes."""
+        if not isinstance(entry, str) or not entry.strip() or "\n" in entry or "\r" in entry:
+            raise ReviewQueueError("ledger entry must be nonempty and single-line")
+        lines = content.splitlines(keepends=True)
+        if not lines or lines[0].strip() != "---":
+            raise ReviewQueueError("--ledger-entry requires leading YAML with a single-line asr_note")
+        for index in range(1, len(lines)):
+            if lines[index].strip() == "---":
+                break
+            match = re.match(r"^asr_note:\s*(.*?)\s*$", lines[index].rstrip("\r\n"))
+            if not match:
+                continue
+            value = match.group(1)
+            if value in {"|", ">", "|-", ">-", "|+", ">+"}:
+                raise ReviewQueueError("multi-line asr_note is not supported by --ledger-entry")
+            if value.startswith('"'):
+                try:
+                    value = json.loads(value)
+                except ValueError as e:
+                    raise ReviewQueueError("asr_note must use a valid JSON-compatible quoted scalar") from e
+            elif value.startswith("'") and value.endswith("'"):
+                value = value[1:-1].replace("''", "'")
+            if not isinstance(value, str):
+                raise ReviewQueueError("asr_note must be a string")
+            if entry.strip() in value.split("；"):
+                return content, lines[index], lines[index]
+            old_line = lines[index]
+            ending = "\r\n" if old_line.endswith("\r\n") else "\n" if old_line.endswith("\n") else ""
+            value = f"{value}；{entry.strip()}" if value else entry.strip()
+            new_line = "asr_note: " + json.dumps(value, ensure_ascii=False) + ending
+            lines[index] = new_line
+            return "".join(lines), old_line, new_line
+        raise ReviewQueueError("--ledger-entry requires an existing single-line asr_note")
+
+    def _load(self, contents: dict[Path, str], path: Path) -> str:
+        if path not in contents:
+            contents[path] = self._read_file(path)
+        return contents[path]
+
+    # ---- planners ----
+
+    def _plan_file_edit(
+        self, content: str, action: dict[str, Any], item: ReviewItem
+    ) -> tuple[Optional[str], str]:
+        """Returns (new_content, applied_new); (None, new) = already in place."""
+        old, new = action["old"], action["new"]
+        # A correction-ledger frontmatter field (`asr_note`) quotes old forms on
+        # purpose — "修正含：<旧形>→<正确形>". Stage 1 and trap-scan both mask it;
+        # so must the accept path, or resolving an item rewrites the very
+        # provenance record that documents it. dictionary_processor's own
+        # comment predicted this failure ("a phantom review item whose accept
+        # would corrupt the ledger"); only the enqueue half had been closed.
+        # (Observed 2026-09: an agent applied a name fix by hand, then resolved
+        # the matching item; the ledger citation was the last occurrence left, so
+        # "<变体>→<正名>" became "<正名>→<正名>" — a ledger contradicting itself,
+        # reported as a successful replace.)
+        masked, ledger_spans = _mask_ledger_spans(content)
+        count = sum(1 for _ in re.finditer("(?=" + re.escape(old) + ")", masked))
+        line_no = action.get("expect_line") or item.line_number
+        # An item locator applies only to its own old token/file. Explicit packs
+        # may also edit unrelated files or other tokens under the legacy guard.
+        offset = item.context_offset if (
+            old == item.original_text and item.file_path
+            and Path(action["path"]).resolve() == Path(item.file_path).resolve()
+        ) else None
+        snippet = self._focused_context(old, item.context_snippet, offset)
+        verdict = self._already_applied_verdict(
+            masked, old, new, snippet, line_no, selected_slot=offset is not None)
+        if verdict.kind == "applied":
+            # A hand edit landed the suggestion before the verdict. The
+            # verdict is still "accepted" — recording it as kept_original
+            # would describe the transcript as right as spoken, which it
+            # was not. Nothing is written; the caller logs it as skipped.
+            # This runs before the occurrence count on purpose: a suggestion
+            # that contains the original (阿里→阿里云) leaves `old` in the
+            # file forever, and an original surviving in a different utterance
+            # far from the hint is that utterance's business, not this row's.
+            return None, new
+        if count == 0:
+            if verdict.kind == "other_form":
+                raise ReAnchorNeeded(
+                    f"anchor text not found: {old[:60]!r} — the recorded context "
+                    f"reappears with {new[:60]!r} in its slot at line(s) "
+                    f"{verdict.hit_lines}, but line(s) {verdict.other_lines} carry a "
+                    f"different form there, so which line this row meant is "
+                    f"ambiguous; nothing was modified. Settle those line(s) first "
+                    f"(their own rows, or by hand), then resolve this one"
+                )
+            raise ReAnchorNeeded(
+                f"anchor text not found: {old[:60]!r} — the file changed since "
+                f"enqueue (or an earlier action in this pack consumed it) and the "
+                f"recorded context does not reappear with {new[:60]!r} in its slot; "
+                f"nothing was modified (if the utterance is gone, close the row "
+                f"with --decision skipped --note <why>)"
+            )
+        if count == 1 and not line_no and offset is None:
+            # No hint to validate against; a sole occurrence is all we have.
+            idx = masked.find(old)
+        else:
+            # Validate even a UNIQUE occurrence against the anchor. Skipping
+            # that was the second half of the 2026-09-01 corruption: with the
+            # anchored line already fixed, `count == 1` matched a different
+            # line entirely and the careful ladder below never ran. "CONTENT
+            # outranks POSITION" has to hold at every count, not just >1.
+            try:
+                idx = self._locate_anchor(
+                    masked, old, line_no, snippet,
+                    require_exact_context=offset is not None)
+            except ReAnchorNeeded as exc:
+                if verdict.hit_lines:
+                    # The recorded context already reads with the suggestion,
+                    # and the original that is left belongs to another
+                    # utterance (or to a look-alike near the hint). Sending the
+                    # reader to --reanchor-review here would re-point this row
+                    # at that other utterance and edit it under this row's id.
+                    base = str(exc).replace(
+                        " (repair with --reanchor-review <id> first)", "")
+                    raise ReAnchorNeeded(
+                        f"{base}. This row's recorded context already reads with "
+                        f"{new[:60]!r} at line(s) {verdict.hit_lines}; the original "
+                        f"surviving at line(s) {verdict.other_lines} belongs to a "
+                        f"different utterance (or a look-alike near the hint) — "
+                        f"settle it on its own row or by hand, then resolve this "
+                        f"row; do not --reanchor-review it onto that line"
+                    ) from exc
+                raise
+        edited = masked[:idx] + new + masked[idx + len(old):]
+        if ledger_spans:
+            edited = _restore_ledger_spans(edited, ledger_spans)
+        return edited, new
+
+    @staticmethod
+    def _already_applied(
+        content: str, old: str, new: str, snippet: Optional[str],
+        line_no: Optional[int] = None, window: int = RESOLVE_WINDOW_LINES,
+    ) -> bool:
+        """True when `_already_applied_verdict` is `applied` — see there."""
+        return ReviewQueue._already_applied_verdict(
+            content, old, new, snippet, line_no, window).kind == "applied"
+
+    @staticmethod
+    def _already_applied_verdict(
+        content: str, old: str, new: str, snippet: Optional[str],
+        line_no: Optional[int] = None, window: int = RESOLVE_WINDOW_LINES,
+        *, selected_slot: bool = False,
+    ) -> "AppliedVerdict":
+        """Is the suggestion already sitting where the anchor was?
+
+        The accept path fails closed once the anchored occurrence cannot be
+        located, because "not where it was" alone cannot tell a hand-applied
+        fix from a drifted file. This is the one shape it CAN tell apart: the
+        context recorded at enqueue time reappears in the file with `new` in
+        the exact slot `old` occupied and the recorded neighbours on both
+        sides of that slot intact. The whole file is searched, not a window
+        around the line hint: frontmatter growth or a deleted paragraph
+        shifts every later line, and with the original gone a hint that
+        drifted past the resolve window would otherwise strand a row
+        whose fix is in place. The occurrence count of `old` is deliberately
+        not a precondition — a suggestion that contains the original
+        (阿里→阿里云) never lets `old` disappear.
+
+        Neighbour width is tried from 8 characters down to 2, so a second
+        correction on the same line that leaves at least two recorded
+        characters between itself and this slot does not defeat the check; an
+        edit touching the slot does (fail closed). A one-sided neighbourhood
+        (anchor at a snippet edge) must be at least 3 characters to stand in
+        for the missing side, and a snippet that is the bare token carries no
+        neighbours to verify — fail closed. No snippet: fail closed.
+
+        Verdicts, each fail-closed except the first:
+          applied     — the neighbourhood reads with `new` and nothing below
+                        contradicts it; `hit_lines` says where.
+          survivor    — `old` still occurs within ±window lines of the hint
+                        outside any occurrence of `new`: the anchored
+                        utterance, or a look-alike right next to it, is still
+                        garbled; the normal locate-and-edit ladder decides.
+          other_form  — the recorded neighbourhood occurs somewhere with a
+                        third form in the slot: anywhere in the file at the
+                        width that matched, or within ±window lines of the
+                        hint at any width down to 2 (a hand edit that changed
+                        the anchored line to something else, with an
+                        adjacent co-edit, is caught here as long as two
+                        recorded characters survive on each side of the
+                        slot). Which line the row meant is ambiguous; the
+                        row needs a human exit, not a recorded `accepted`.
+          absent      — the neighbourhood does not read with `new` anywhere.
+
+        Boundaries this cannot see, by construction: the anchored utterance
+        deleted outright (or rewritten past both neighbours) while an
+        identical neighbourhood elsewhere already reads with `new` — that is
+        indistinguishable from drift and is `applied`; nothing is written
+        either way, `reopen` re-pends the row, and a garble that is still in
+        the file is re-deferred by the next Stage 1 run. `content` is the
+        ledger-masked text, so an `asr_note` citation of the new form can
+        never satisfy this.
+        """
+        if not old or not new or not snippet or not snippet.strip():
+            return AppliedVerdict("absent", [], [])
+        snip = snippet.strip()
+        lines = content.splitlines(keepends=True)
+        # 1. Widest recorded neighbourhood that reads with `new` somewhere.
+        found: Optional[tuple[int, str, str]] = None
+        start = 0
+        while found is None:
+            p = snip.find(old, start)
+            if p < 0:
+                return AppliedVerdict("absent", [], [])
+            start = p + len(old)
+            for k in (8, 6, 4, 3, 2):
+                left = snip[max(0, p - k):p]
+                right = snip[p + len(old):p + len(old) + k]
+                if not left and not right:
+                    break
+                if (not left or not right) and len(left + right) < 3:
+                    continue
+                if left + new + right in content:
+                    found = (p, left, right)
+                    break
+        p, left, right = found
+        hit_lines = [i + 1 for i, ln in enumerate(lines) if left + new + right in ln]
+        lo = max(0, (line_no or 1) - 1 - window)
+        hi = min(len(lines), (line_no or 1) + window)
+        # 2. The original itself still near the hint, outside any `new`.
+        if line_no:
+            survivors = [
+                i + 1 for i in range(lo, hi)
+                if (snip if selected_slot else old) in lines[i].replace(new, "\x00")
+            ]
+            if survivors:
+                return AppliedVerdict("survivor", hit_lines, survivors)
+        # 3. Third forms: whole file at the matched width, hint window at every width.
+        others: set[int] = set()
+        for i, ln in enumerate(lines):
+            if ReviewQueue._slot_holds_other_form(ln, left, right, new):
+                others.add(i + 1)
+        if line_no:
+            for k in (8, 6, 4, 3, 2):
+                l2 = snip[max(0, p - k):p]
+                r2 = snip[p + len(old):p + len(old) + k]
+                if not l2 and not r2:
+                    break
+                if (not l2 or not r2) and len(l2 + r2) < 3:
+                    continue
+                for i in range(lo, hi):
+                    if ReviewQueue._slot_holds_other_form(lines[i], l2, r2, new):
+                        others.add(i + 1)
+        if others:
+            return AppliedVerdict("other_form", hit_lines, sorted(others))
+        return AppliedVerdict("applied", hit_lines, [])
+
+    @staticmethod
+    def _slot_holds_other_form(line: str, left: str, right: str, new: str) -> bool:
+        """Does `left … right` occur on this line with something other than
+        `new` in the slot? Two-sided: the nearest pairing (the filler may not
+        itself contain either neighbour), any length, one line. One-sided: the
+        `len(new)` characters adjoining the neighbour. Matches are found with
+        a lookahead so overlapping occurrences are all examined."""
+        if left and right:
+            filler = r"((?:(?!" + re.escape(left) + "|" + re.escape(right) + r").)*?)"
+            pattern = "(?=" + re.escape(left) + filler + re.escape(right) + ")"
+            return any(m.group(1) != new for m in re.finditer(pattern, line))
+        if left:
+            n = len(left)
+            return any(
+                line[m.start() + n:m.start() + n + len(new)] != new
+                for m in re.finditer("(?=" + re.escape(left) + ")", line)
+            )
+        return any(
+            line[max(0, m.start() - len(new)):m.start()] != new
+            for m in re.finditer("(?=" + re.escape(right) + ")", line)
+        )
+
+    @staticmethod
+    def _locate_anchor(
+        content: str, needle: str, line_no: Optional[int],
+        snippet: Optional[str], window: int = RESOLVE_WINDOW_LINES,
+        *, require_exact_context: bool = False,
+    ) -> int:
+        """Choose ONE occurrence of `needle` when several exist.
+
+        Selection ladder (fail closed at every rung). CONTENT outranks POSITION:
+        when the file drifts, line numbers go stale but the recorded context
+        snippet stays true — so a look-alike occurrence sitting exactly on the
+        (now wrong) hinted line must not win just because of its position.
+          1. only occurrences within ±window lines of the line hint are eligible;
+          2. if a context snippet was recorded at enqueue time, candidate lines
+             must match it — no match means the file drifted (refuse rather
+             than edit a look-alike: a wrong auto-edit is worse than none);
+          3. among the survivors, an occurrence ON the hinted line wins;
+          4. otherwise the uniquely nearest line wins; a distance tie refuses.
+
+        Explicit selected slots require the complete focused context to match
+        their exact span; a shared line prefix is not occurrence identity.
+        """
+        if not line_no:
+            raise ReAnchorNeeded(
+                f"anchor text appears {content.count(needle)} times and no line "
+                f"hint exists — refusing an ambiguous edit"
+            )
+        lines = content.splitlines(keepends=True)
+        offsets: list[int] = []
+        acc = 0
+        for line in lines:
+            offsets.append(acc)
+            acc += len(line)
+        candidates: list[tuple[int, int]] = []  # (1-based line, absolute offset)
+        for i in range(max(0, line_no - 1 - window), min(len(lines), line_no + window)):
+            pos = lines[i].find(needle)
+            while pos != -1:
+                candidates.append((i + 1, offsets[i] + pos))
+                pos = lines[i].find(needle, pos + 1)
+        if not candidates:
+            raise ReAnchorNeeded(
+                f"anchor text appears {content.count(needle)} times but none within "
+                f"±{window} lines of line {line_no} — refusing an ambiguous edit "
+                f"(a fix applied by hand is recognised when the recorded context reads "
+                f"with the suggestion in its slot and no look-alike near the hint still "
+                f"carries the original; occurrences elsewhere are separate decisions)"
+            )
+        if require_exact_context and (not snippet or not snippet.strip()):
+            raise ReAnchorNeeded("selected occurrence has no exact context anchor")
+        if snippet and snippet.strip():
+            probe = snippet.strip()[:80]
+            candidates = [
+                c for c in candidates
+                if lines[c[0] - 1].strip() and (
+                    lines[c[0] - 1].strip()[:80] in probe or probe in lines[c[0] - 1]
+                )
+            ]
+            if not candidates:
+                raise ReAnchorNeeded(
+                    f"no line near line {line_no} matches the context recorded at "
+                    f"enqueue time — the file drifted; refusing to edit a look-alike "
+                    f"(repair with --reanchor-review <id> first)"
+                )
+            # Line identity alone cannot select between repeated tokens on that
+            # line. A verbatim, narrower context containing the token once can;
+            # a full-line context containing it twice must remain ambiguous.
+            exact = snippet.strip()
+            if sum(1 for _ in re.finditer("(?=" + re.escape(needle) + ")", exact)) == 1:
+                contextual = []
+                for line_number, offset in candidates:
+                    line = lines[line_number - 1]
+                    start = line.find(exact)
+                    while start != -1:
+                        if offset == offsets[line_number - 1] + start + exact.index(needle):
+                            contextual.append((line_number, offset))
+                            break
+                        start = line.find(exact, start + 1)
+                if require_exact_context and not contextual:
+                    raise ReAnchorNeeded(
+                        "selected occurrence's exact context no longer matches — "
+                        "refusing to edit another occurrence on the same line"
+                    )
+                if contextual:
+                    candidates = contextual
+            elif require_exact_context:
+                raise ReAnchorNeeded("selected occurrence's context does not identify one exact span")
+        on_hint = [c for c in candidates if c[0] == line_no]
+        if len(on_hint) == 1:
+            return on_hint[0][1]
+        if len(on_hint) > 1:
+            raise ReAnchorNeeded(
+                f"anchor text appears more than once on line {line_no} itself — "
+                f"refusing an ambiguous edit (use a longer, unique anchor)"
+            )
+        if len(candidates) == 1:
+            return candidates[0][1]
+        candidates.sort(key=lambda c: abs(c[0] - line_no))
+        if abs(candidates[0][0] - line_no) == abs(candidates[1][0] - line_no):
+            raise ReAnchorNeeded(
+                f"two occurrences are equally near line {line_no} "
+                f"(lines {candidates[0][0]} and {candidates[1][0]}) — refusing an ambiguous edit"
+            )
+        return candidates[0][1]
+
+    def _plan_append_note(
+        self, content: str, action: dict[str, Any]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Returns (new_content, inserted_text); (None, None) = already present."""
+        text_line = action["text"].rstrip("\n")
+        if text_line and text_line in content:
+            return None, None
+        anchor = action["anchor"]
+        anchor_line = None
+        for line in content.splitlines():
+            if anchor in line:
+                anchor_line = line
+                break
+        if anchor_line is None:
+            raise ReAnchorNeeded(
+                f"anchor {anchor!r} not found — refusing to append blindly"
+            )
+        anchor_idx = content.find(anchor_line)
+        line_end = content.find("\n", anchor_idx)
+        if line_end == -1:
+            # Anchor is the file's last line with no trailing newline: add one
+            # first so the note starts on its own line instead of gluing on.
+            inserted = "\n" + text_line + "\n"
+            return content + inserted, inserted
+        insert_at = line_end + 1
+        inserted = text_line + "\n"
+        return content[:insert_at] + inserted + content[insert_at:], inserted
+
+    # ==================== Audit ====================
+
+    @staticmethod
+    def _audit(conn: sqlite3.Connection, action: str, entity_id: int,
+               user: Optional[str], details: dict[str, Any]) -> None:
+        conn.execute(
+            """INSERT INTO audit_log (action, entity_type, entity_id, user, details, success)
+               VALUES (?, 'review_item', ?, ?, ?, 1)""",
+            (action, entity_id, user, json.dumps(details, ensure_ascii=False)),
+        )
+
+
+def _ledger_line_flags(content: str) -> list[bool]:
+    """One flag per line: True when the line is part of the correction ledger
+    (an `asr_note:` key inside the leading YAML frontmatter block, or an
+    `asr_note:` line anywhere). Those lines quote old forms deliberately
+    ("修正含：<旧形>→<正确形>"), so they are never legitimate targets for a
+    revert or a re-anchor — editing one rewrites the audit trail (2026-09-20
+    #2241: a reopen revert turned 「旧词→新词」 into 「旧词→旧词」 because the new
+    form survived only in the ledger line).
+
+    Only the `asr_note:` KEY is a ledger. An earlier version flagged the whole
+    frontmatter block, which made every other frontmatter key un-revertible
+    while the accept path could still edit it (`title: 旧词 → 新词` accepted
+    fine, then reopen refused with "survives only in the asr_note ledger" — a
+    verdict that pointed the operator at the wrong place entirely). The accept
+    path's own notion of the ledger is `dictionary_processor._mask_ledger_spans`,
+    and it masks exactly `asr_note:` values; the two sides now agree. Writing
+    into a frontmatter key that is not a ledger and not being able to take it
+    back is the defect, and widening the revert refusal would only have widened
+    the asymmetry."""
+    lines = content.split("\n")
+    flags = [ln.startswith("asr_note:") for ln in lines]
+    if lines and lines[0].lstrip("﻿").strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                break
+            m = _FRONTMATTER_KEY_RE.match(lines[i])
+            flags[i] = bool(m) and m.group(1) == "asr_note"
+    return flags
+
+
+def _revert_one_body_occurrence(
+    content: str, new_text: str, old_text: str
+) -> tuple[Optional[str], str]:
+    """Reverse one file_edit, body lines only. Returns (new_content, msg);
+    new_content is None when nothing was written.
+
+    The ledger is excluded on both sides of the count: a new form that
+    survives ONLY in an asr_note line is a ledger citation, not an un-reverted
+    edit — reverting it would corrupt the audit trail (#2241, 2026-09-20).
+
+    The count has to be exact in BOTH dimensions. Counting lines alone let a
+    line carrying the replacement text twice through as "reverted": the accept
+    had landed on the second occurrence, `replace(..., 1)` undid the FIRST one,
+    and the caller was told the edit was undone while the transcript still
+    carried it — plus one pre-existing occurrence silently rewritten to the old
+    form. origin/main refused this shape outright ("appears 3 times (need
+    exactly 1)"); the line-level rewrite lost that, so the in-line count is
+    checked too."""
+    if not new_text:
+        return None, "not reverted: empty replacement text"
+    lines = content.split("\n")
+    ledger = _ledger_line_flags(content)
+    hits = [i for i, ln in enumerate(lines) if not ledger[i] and new_text in ln]
+    if len(hits) == 1:
+        i = hits[0]
+        on_line = lines[i].count(new_text)
+        if on_line != 1:
+            return None, (
+                f"not reverted: replacement text appears {on_line} times on "
+                f"line {i + 1} (need exactly 1) — revert manually"
+            )
+        lines[i] = lines[i].replace(new_text, old_text, 1)
+        return "\n".join(lines), "reverted"
+    if not hits:
+        if any(new_text in ln for ln, is_ledger in zip(lines, ledger) if is_ledger):
+            return None, (
+                "not reverted: the replacement text survives only in the "
+                "asr_note ledger, which quotes old forms on purpose — leave "
+                "the ledger alone and revert the body by hand if needed"
+            )
+        if new_text in content:
+            return None, (
+                "not reverted: replacement text is present in the file but on "
+                "no single line (it spans a line break) — revert manually"
+            )
+        return None, "not reverted: replacement text no longer present in the file"
+    return None, (
+        f"not reverted: replacement text appears on {len(hits)} non-ledger lines "
+        f"(need exactly 1) — revert manually"
+    )

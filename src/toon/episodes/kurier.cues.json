@@ -1,0 +1,212 @@
+{
+ "total": "auto",
+ "pads": [],
+ "events": [
+  {
+   "type": "sample",
+   "file": "public/sfx/vibrate.opus",
+   "t": 2.31,
+   "gain": 1.8,
+   "from": 1.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/notify.opus",
+   "t": 2.36,
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/stamp.opus",
+   "t": 4.98,
+   "gain": 0.85
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 5.68,
+   "gain": 0.4
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 14.36,
+   "gain": 0.4
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 17.6,
+   "gain": 0.4
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 27.44,
+   "gain": 0.4
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/whoosh.opus",
+   "t": 34.8,
+   "gain": 0.4
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/ping.opus",
+   "t": 6.58,
+   "gain": 3.0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/typing.opus",
+   "t": 8.62,
+   "gain": 0.7,
+   "dur": 1.2,
+   "fade": 0.15
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/send.opus",
+   "t": 10.11,
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/notify.opus",
+   "t": 11.21,
+   "gain": 0.45
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/paper.opus",
+   "t": 13.85,
+   "gain": 0.5
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/ping.opus",
+   "t": 14.96,
+   "gain": 3.0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/ping.opus",
+   "t": 16.34,
+   "gain": 3.4
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/hit.opus",
+   "t": 16.77,
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/notify.opus",
+   "t": 17.34,
+   "gain": 0.55
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/vibrate.opus",
+   "t": 17.29,
+   "gain": 1.5,
+   "from": 1.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/stamp.opus",
+   "t": 27.12,
+   "gain": 0.85
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/vibrate.opus",
+   "t": 25.43,
+   "gain": 1.6,
+   "from": 1.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/notify.opus",
+   "t": 25.48,
+   "gain": 0.5
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/hit.opus",
+   "t": 27.94,
+   "gain": 0.9
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/bag.opus",
+   "t": 30.23,
+   "gain": 2.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/bag.opus",
+   "t": 30.58,
+   "gain": 2.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/bag.opus",
+   "t": 31.03,
+   "gain": 2.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/vibrate.opus",
+   "t": 32.53,
+   "gain": 1.8,
+   "from": 1.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/notify.opus",
+   "t": 32.58,
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/knock.opus",
+   "t": 39.03,
+   "gain": 0.7
+  }
+ ],
+ "music": [
+  {
+   "file": "public/music/mystic_violin.mp4",
+   "gain": 0.3,
+   "t0": 0,
+   "t1": 27.79,
+   "loop": true,
+   "fade": 0.4
+  },
+  {
+   "file": "public/music/mystic_violin.mp4",
+   "gain": 0.34,
+   "t0": 29.400000000000002,
+   "t1": "end",
+   "from": 12,
+   "loop": true,
+   "fade": 1.2
+  },
+  {
+   "file": "public/sfx/room.mp4",
+   "gain": 4.0,
+   "t0": 18.099999999999998,
+   "t1": 35.3,
+   "loop": true,
+   "fade": 0.5
+  }
+ ],
+ "duck": {
+  "db": 7,
+  "music_db": 9,
+  "smooth": 0.12
+ }
+}
