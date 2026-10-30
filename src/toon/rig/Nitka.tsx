@@ -146,9 +146,10 @@ export type NitkaProps = {
   spin?: number;             // spin angle of the yarn pattern, degrees
   reach?: {pts: [number, number][]; p: number; taut?: number; pinFrom?: number; fade?: number} | null;  // the loose thread goes through these points (world coords); pins from index pinFrom
   flip?: boolean;
+  noir?: number;             // 0..1: hat shadow on the forehead, darker underside, no pink cheeks (for serious stories)
 };
 
-export const Nitka: React.FC<NitkaProps> = ({t, x, y, s = 1, st, talk = 0, roll = 0, spin = 0, reach = null, flip = false}) => {
+export const Nitka: React.FC<NitkaProps> = ({t, x, y, s = 1, st, talk = 0, roll = 0, spin = 0, reach = null, flip = false, noir = 0}) => {
   const def = EMO[st.emo];
   const id = def.idle(t), lag = def.idle(t - 0.09);
   const tk = st.take;
@@ -208,6 +209,10 @@ export const Nitka: React.FC<NitkaProps> = ({t, x, y, s = 1, st, talk = 0, roll 
             {[-90, -50, -10, 30, 70].map((o, i) => <path key={i} d={`M -150 ${cy + o} Q 0 ${cy + o - 70} 150 ${cy + o + 20}`} stroke={i % 2 ? RED_D : RED_L} strokeWidth={7} opacity={0.55} />)}
             {[-60, 0, 60].map((o, i) => <path key={`v${i}`} d={`M ${o - 40} ${cy - 150} Q ${o + 50} ${cy} ${o - 20} ${cy + 150}`} stroke={i % 2 ? RED_L : RED_D} strokeWidth={6} opacity={0.4} />)}
           </g>
+          {noir > 0 && <>
+            <ellipse cx={20} cy={cy + 95} rx={170} ry={110} fill="#14060a" opacity={0.45 * noir} />
+            <ellipse cx={8} cy={cy - 118 * sy} rx={150} ry={46} fill="#0a0507" opacity={0.5 * noir} />
+          </>}
         </g>
         {/* arms: left one first (behind), right one acts */}
         {roll < 0.5 && <ArmG from={L0} to={hL} bend={-20} />}
@@ -221,7 +226,7 @@ export const Nitka: React.FC<NitkaProps> = ({t, x, y, s = 1, st, talk = 0, roll 
             <line x1={-64} y1={eyesY - 56 + lift + tilt * -0.4} x2={-24} y2={eyesY - 56 + lift + tilt} />
             <line x1={24} y1={eyesY - 56 + lift + extra + tilt} x2={64} y2={eyesY - 56 + lift + extra + tilt * -0.4} />
           </g>
-          <ellipse cx={-82} cy={cy + 30} rx={17} ry={9} fill={RED_L} opacity={def.blush} /><ellipse cx={82} cy={cy + 30} rx={17} ry={9} fill={RED_L} opacity={def.blush} />
+          <ellipse cx={-82} cy={cy + 30} rx={17} ry={9} fill={RED_L} opacity={def.blush * (1 - noir)} /><ellipse cx={82} cy={cy + 30} rx={17} ry={9} fill={RED_L} opacity={def.blush * (1 - noir)} />
           <MouthG y={cy + 48} shape={def.mouth} open={talk} t={t} />
         </g>
       </g>

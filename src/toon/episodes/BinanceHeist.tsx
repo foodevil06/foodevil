@@ -27,21 +27,23 @@ const END = L(25).end + 0.3;
 // Each line: [word index, emotion, extras] keys; the first key is the take on her first word.
 const NL = nitka.lines;
 const NW = (i: number, k: number) => NL[i].words[k].t;
-const NKEYS: [number, Emo, {arm?: Arm; look?: [number, number]; emote?: Emote}?][][] = [
-  [[0, 'surprised', {look: [0.7, -0.4]}], [2, 'laugh', {arm: 'shrug'}]],
-  [[0, 'thinking', {arm: 'chin', look: [0.8, -0.5]}], [5, 'excited', {arm: 'point', look: [0.6, -0.3]}]],
-  [[0, 'surprised', {emote: '!', look: [0.6, -0.2]}], [2, 'proud', {arm: 'hips'}]],
-  [[0, 'happy', {arm: 'wave'}], [3, 'playful', {arm: 'tug'}]],
-];
-const NX = [240, 240, 240, 470], NFEET = 1330, NSC = 1.3;  // the sign-off takes the centre
+// acting per insert, keyed by the narrator line it follows (binance.nitka.json decides which inserts exist)
+const NKEYS: Record<number, [number, Emo, {arm?: Arm; look?: [number, number]; emote?: Emote}?][]> = {
+  3: [[0, 'surprised', {look: [0.7, -0.4]}], [2, 'smug', {arm: 'shrug'}]],
+  13: [[0, 'thinking', {arm: 'chin', look: [0.8, -0.5]}], [5, 'excited', {arm: 'point', look: [0.6, -0.3]}]],
+  17: [[0, 'surprised', {emote: '!', look: [0.6, -0.2]}], [2, 'proud', {arm: 'hips'}]],
+  25: [[0, 'suspicious', {look: [0.3, 0]}], [3, 'playful', {arm: 'tug'}]],
+};
+const NX = (after: number) => (after >= 25 ? 470 : 240), NFEET = 1330, NSC = 1.3;  // the sign-off takes the centre
 const NitkaInsert: React.FC<{t: number}> = ({t}) => {
   const i = NL.findIndex((l) => t >= l.start - nitka.enter - 0.05 && t < l.end + nitka.exit + 0.1);
   if (i < 0) return null;
   const ln = NL[i], t0 = ln.start - nitka.enter, t1 = ln.end + 0.15;
   const inK = easeOut((t - t0) / (nitka.enter - 0.05)), outK = easeInOut((t - t1) / (nitka.exit - 0.1));
-  const x = NX[i] - (NX[i] + 180) * (1 - inK) - (NX[i] + 280) * clamp(outK);
+  const nx = NX(ln.after);
+  const x = nx - (nx + 180) * (1 - inK) - (nx + 280) * clamp(outK);
   const rolling = t < t0 + nitka.enter - 0.08 || t > t1 ? 1 : 0;
-  const keys: Key[] = [[0, 'neutral'], ...NKEYS[i].map(([k, e, o]) => [NW(i, k) - 0.05, e, o] as Key)];
+  const keys: Key[] = [[0, 'neutral'], ...(NKEYS[ln.after] ?? []).map(([k, e, o]) => [NW(i, Math.min(k, ln.words.length - 1)) - 0.05, e, o] as Key)];
   const st = act(t, keys);
   const talk = rolling ? 0 : nitkaMouth.mouth[Math.min(nitkaMouth.mouth.length - 1, Math.max(0, Math.round(t * nitkaMouth.fps)))] ?? 0;
   const spin = -540 * (1 - inK) - 600 * clamp(outK);
@@ -50,7 +52,7 @@ const NitkaInsert: React.FC<{t: number}> = ({t}) => {
     <AbsoluteFill style={{pointerEvents: 'none'}}>
       <AbsoluteFill style={{background: `radial-gradient(ellipse 55% 40% at 20% 72%, rgba(7,11,20,${0.75 * inK * (1 - clamp(outK))}) 0%, rgba(7,11,20,0) 70%)`}} />
       <svg width={1080} height={1920} style={{position: 'absolute'}}>
-        <Nitka t={t} x={x} y={NFEET + hop} s={NSC} st={st} talk={talk} roll={rolling} spin={spin} />
+        <Nitka t={t} x={x} y={NFEET + hop} s={NSC} st={st} talk={talk} roll={rolling} spin={spin} noir={1} />
       </svg>
     </AbsoluteFill>
   );
@@ -228,7 +230,7 @@ export const BinanceHeist: React.FC<{audio?: boolean; safe?: boolean}> = ({audio
         </svg>
         <AbsoluteFill style={{background: 'rgba(7,11,20,0.55)'}} />
         <BigNum f={f} fps={fps} at={L(25).start} text="≈ $3,3 МЛРД" y={360} size={110} sub="НЕ ЗАМОРОЖЕНЫ" />
-        <div style={{position: 'absolute', inset: 0, opacity: 1 - ramp(t, NL[3].start - 1.0, NL[3].start - 0.45)}}>
+        <div style={{position: 'absolute', inset: 0, opacity: 1 - ramp(t, NL[NL.length - 1].start - 1.0, NL[NL.length - 1].start - 0.45)}}>
         <CommentBubble f={f} fps={fps} at={L(25).start + 0.5} text="Думаю, найдут, потому что…" x={SAFE.left + 20} y={760} />
         {(() => {
           const p = spring01(f, (L(25).start + 1.4) * fps, fps, 2, 0.5), flip = clamp((t - L(25).start - 2.6) / 0.25);
