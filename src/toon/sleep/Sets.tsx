@@ -99,7 +99,7 @@ export const Room: React.FC<{L: RoomLook; hero: React.ReactNode; front?: React.R
       <rect x={-600} y={1330} width={2400} height={36} fill="#6b4a32" /><rect x={-600} y={1366} width={2400} height={1300} fill="#4a3324" />
       <rect x={-600} y={1366} width={2400} height={14} fill="#000" opacity={0.25} />
       {L.laptop === 'closed'
-        ? <rect x={372} y={1300} width={376} height={30} rx={8} fill="#2b2f36" stroke="#15171c" strokeWidth={5} />
+        ? <rect x={770} y={1302} width={300} height={28} rx={8} fill="#2b2f36" stroke="#15171c" strokeWidth={5} />
         : <><path d="M 382 1330 L 400 1108 L 720 1108 L 738 1330 Z" fill="#2b2f36" stroke="#15171c" strokeWidth={6} /><circle cx={560} cy={1215} r={20} fill="#3c424c" /></>}
       {L.laptop !== 'closed' && Array.from({length: Math.min(9, Math.floor(L.notes))}, (_, i) => {
         const q = mulberry32(40 + i); const nx = 420 + q() * 250, ny = 1124 + q() * 120;

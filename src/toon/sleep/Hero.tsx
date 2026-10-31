@@ -88,10 +88,10 @@ export const Hero: React.FC<HeroSpec> = (o) => {
     tilt = 0, turn = 0, nod = 0, rest = 0, slump = 0, breath = 0, rim = 0, rimColor = '#bcd4ff', blush = 0.35} = o;
   const skin = mixColor(HC.skin, HC.pale, pale), skinShade = mixColor(HC.skinShade, HC.paleShade, pale);
   const sy = slump * 26 + breath * 4;                 // shoulders drop with tiredness and move with the breath
-  const headY = -150 + nod * 34 + sy * 0.6 + rest * 150;
+  const headY = -150 + nod * 34 + sy * 0.6 + rest * 215;   // rest: the head lies on the folded arms
   const fx = turn * 22;                                // the face slides sideways when the head turns
   const head = (
-    <g transform={`translate(${rest * 40} ${headY}) rotate(${tilt + nod * 9 - rest * 62})`}>
+    <g transform={`translate(${rest * 30} ${headY}) rotate(${tilt + nod * 9 - rest * 80})`}>
       {/* ears behind the face */}
       {[-1, 1].map((k) => <ellipse key={k} cx={k * 117 - turn * 10} cy={4} rx={19} ry={29} fill={skinShade} stroke={HC.ink} strokeWidth={4.5} />)}
       <path d="M -118 -10 C -122 -92 -80 -140 0 -140 C 80 -140 122 -92 118 -10 C 114 72 70 126 0 129 C -70 126 -114 72 -118 -10 Z" fill={skin} stroke={HC.ink} strokeWidth={5} />
@@ -147,8 +147,9 @@ export const Hero: React.FC<HeroSpec> = (o) => {
       <path d="M -82 12 C -62 58 62 58 82 12 C 62 -8 -62 -8 -82 12 Z" fill={HC.hoodShade} stroke={HC.ink} strokeWidth={4.5} />
       {[-1, 1].map((k) => <g key={k}><path d={`M ${k * 22} 44 Q ${k * 26} 120 ${k * 28} 196`} stroke={HC.string} strokeWidth={7} fill="none" strokeLinecap="round" /><rect x={k * 28 - 6} y={194} width={12} height={20} rx={4} fill={HC.string} /></g>)}
       {o.mid}
-      {head}
-      {arm(-1, o.handL)}{arm(1, o.handR)}
+      {rest > 0.5
+        ? <>{arm(-1, o.handL)}{arm(1, o.handR)}{head}</>   /* asleep: the head lies on top of the arms */
+        : <>{head}{arm(-1, o.handL)}{arm(1, o.handR)}</>}
     </g>
   );
 };
