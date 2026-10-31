@@ -16,6 +16,7 @@ function Need($cmd, $id) {
   Refresh-Path
 }
 
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force   # иначе PowerShell не запустит npm, claude и codex
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'Нет winget: обнови «Установщик приложений» в Microsoft Store и запусти снова.' }
 Need git Git.Git
 Need node OpenJS.NodeJS.LTS
