@@ -13,6 +13,8 @@ import {Vnutri2, VN2_FPS, VN2_SEC} from './toon/episodes/Vnutri2';
 import {Vnutri3, VN3_FPS, VN3_SEC} from './toon/episodes/Vnutri3';
 import {VnutriCover1, VnutriCover2, VnutriCover3, VnutriEndCard} from './toon/episodes/VnutriCovers';
 import {AvatarKeyhole, AvatarEye} from './toon/case/Covers';
+import {Vnutri2R, VN2R_FPS, VN2R_SEC} from './toon/episodes/Vnutri2R';
+import {Vnutri3R, VN3R_FPS, VN3R_SEC} from './toon/episodes/Vnutri3R';
 import {StickExample, StickPoses, InfoCards, SX_FPS, SX_SEC} from './toon/episodes/StickExample';
 
 export const Root: React.FC = () => (
@@ -45,5 +47,9 @@ export const Root: React.FC = () => (
     <Composition id="VnutriEndCard" component={VnutriEndCard} width={1080} height={1920} fps={30} durationInFrames={1} />
     <Composition id="AvatarKeyhole" component={AvatarKeyhole} width={1080} height={1080} fps={30} durationInFrames={1} />
     <Composition id="AvatarEye" component={AvatarEye} width={1080} height={1080} fps={30} durationInFrames={1} />
+    <Composition id="Vnutri2R" component={Vnutri2R} width={1080} height={1920} fps={VN2R_FPS} durationInFrames={Math.round(VN2R_SEC * VN2R_FPS)} defaultProps={{audio: true}} />
+    <Composition id="Vnutri2RSafe" component={Vnutri2R} width={1080} height={1920} fps={VN2R_FPS} durationInFrames={Math.round(VN2R_SEC * VN2R_FPS)} defaultProps={{audio: false, safe: true}} />
+    <Composition id="Vnutri3R" component={Vnutri3R} width={1080} height={1920} fps={VN3R_FPS} durationInFrames={Math.round(VN3R_SEC * VN3R_FPS)} defaultProps={{audio: true}} />
+    <Composition id="Vnutri3RSafe" component={Vnutri3R} width={1080} height={1920} fps={VN3R_FPS} durationInFrames={Math.round(VN3R_SEC * VN3R_FPS)} defaultProps={{audio: false, safe: true}} />
   </>
 );

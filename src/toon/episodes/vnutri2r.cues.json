@@ -1,0 +1,440 @@
+{
+ "total": 69.4,
+ "pads": [
+  {
+   "t0": "line:0-0.06",
+   "t1": "line:24+1.04",
+   "notes": [
+    55,
+    82.4
+   ],
+   "gain": 0.03,
+   "attack": 1.5,
+   "release": 0.02
+  },
+  {
+   "t0": "line:11+2.03",
+   "t1": "line:18+0.0",
+   "notes": [
+    110,
+    116.5,
+    164.8
+   ],
+   "gain": 0.03,
+   "attack": 11.600000000000001,
+   "release": 0.05
+  },
+  {
+   "t0": "line:21+0.0",
+   "t1": "line:24+1.04",
+   "notes": [
+    73.4,
+    77.8
+   ],
+   "gain": 0.035,
+   "attack": 9.089999999999996,
+   "release": 0.02
+  }
+ ],
+ "events": [
+  {
+   "type": "sample",
+   "file": "public/sfx/v_knock.opus",
+   "t": "line:0-0.01",
+   "gain": 1.0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v_knock.opus",
+   "t": "line:0+0.94",
+   "gain": 0.6
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v_breath.opus",
+   "t": "line:0+0.24",
+   "gain": 0.5,
+   "dur": 3.0,
+   "fade": 1.0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v_static.opus",
+   "t": "line:1+1.39",
+   "gain": 0.3,
+   "dur": 0.4,
+   "fade": 0.15
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/kv_piano_stab.opus",
+   "t": "line:2+1.15",
+   "gain": 0.3,
+   "pan": 0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v_static.opus",
+   "t": "line:3+1.15",
+   "gain": 0.5,
+   "dur": 0.6,
+   "fade": 0.2
+  },
+  {
+   "type": "tick",
+   "t": "line:3+1.2",
+   "gain": 0.08
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v2_creak.opus",
+   "t": "line:7+1.85",
+   "gain": 0.8
+  },
+  {
+   "type": "thump",
+   "t": "line:7+1.9",
+   "gain": 0.15,
+   "f0": 70,
+   "f1": 38,
+   "decay": 0.2
+  },
+  {
+   "type": "tick",
+   "t": "line:10+0.4",
+   "gain": 0.07,
+   "f1": 1500,
+   "f2": 2400,
+   "decay": 0.01
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v3_ward_creak.opus",
+   "t": "line:11+2.03",
+   "gain": 0.35
+  },
+  {
+   "type": "thump",
+   "t": "line:13+0.0",
+   "gain": 0.3,
+   "f0": 64,
+   "f1": 36,
+   "decay": 0.18
+  },
+  {
+   "type": "tick",
+   "t": "line:13+0.0",
+   "gain": 0.1,
+   "f1": 900,
+   "f2": 1400,
+   "decay": 0.03
+  },
+  {
+   "type": "thump",
+   "t": "line:15+0.0",
+   "gain": 0.3,
+   "f0": 64,
+   "f1": 36,
+   "decay": 0.18
+  },
+  {
+   "type": "tick",
+   "t": "line:15+0.0",
+   "gain": 0.1,
+   "f1": 900,
+   "f2": 1400,
+   "decay": 0.03
+  },
+  {
+   "type": "thump",
+   "t": "line:17+0.0",
+   "gain": 0.3,
+   "f0": 64,
+   "f1": 36,
+   "decay": 0.18
+  },
+  {
+   "type": "tick",
+   "t": "line:17+0.0",
+   "gain": 0.1,
+   "f1": 900,
+   "f2": 1400,
+   "decay": 0.03
+  },
+  {
+   "type": "thump",
+   "t": "line:12+1.43",
+   "gain": 0.08384204909284948,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:12+1.59",
+   "gain": 0.05868943436499463,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:13+0.086",
+   "gain": 0.09582402112147465,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:13+0.246",
+   "gain": 0.06707681478503225,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:14+0.246",
+   "gain": 0.10723055159056069,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:14+0.406",
+   "gain": 0.07506138611339248,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:14+1.094",
+   "gain": 0.11808927643413031,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:14+1.254",
+   "gain": 0.08266249350389121,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:14+1.901",
+   "gain": 0.1284265043535157,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:14+2.061",
+   "gain": 0.089898553047461,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:14+2.67",
+   "gain": 0.138267280558523,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:14+2.83",
+   "gain": 0.0967870963909661,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:15+0.371",
+   "gain": 0.14763544744738794,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:15+0.531",
+   "gain": 0.10334481321317154,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:16+0.208",
+   "gain": 0.15655370237254002,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:16+0.368",
+   "gain": 0.109587591660778,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:16+0.87",
+   "gain": 0.16504365263212983,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:16+1.03",
+   "gain": 0.11553055684249088,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:16+1.502",
+   "gain": 0.17312586782055475,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:16+1.662",
+   "gain": 0.12118810747438832,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:17+0.232",
+   "gain": 0.1808199296648184,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:17+0.392",
+   "gain": 0.1265739507653729,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "thump",
+   "t": "line:17+0.804",
+   "gain": 0.18814447946746854,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.1
+  },
+  {
+   "type": "thump",
+   "t": "line:17+0.964",
+   "gain": 0.13170113562722796,
+   "f0": 58,
+   "f1": 38,
+   "decay": 0.08
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v3_ward_creak.opus",
+   "t": "line:17+1.63",
+   "gain": 0.9
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/kv_neck_breath.opus",
+   "t": "line:18+2.86",
+   "gain": 0.5
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/kv_rev_swell.opus",
+   "t": "line:21+0.95",
+   "gain": 0.3,
+   "pan": 0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/kv_piano_stab.opus",
+   "t": "line:21+2.73",
+   "gain": 0.32,
+   "pan": 0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/v3_skin_stretch.opus",
+   "t": "line:23+0.77",
+   "gain": 0.7,
+   "dur": 0.5,
+   "fade": 0.1
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/kv_piano_stab2.opus",
+   "t": "line:24+1.04",
+   "gain": 0.5,
+   "pan": 0
+  },
+  {
+   "type": "sample",
+   "file": "public/sfx/kv_screech.opus",
+   "t": "line:24+1.06",
+   "gain": 0.4,
+   "pan": 0
+  },
+  {
+   "type": "thump",
+   "t": "line:24+1.04",
+   "gain": 0.45,
+   "f0": 52,
+   "f1": 28,
+   "decay": 0.4
+  }
+ ],
+ "music": [
+  {
+   "file": "public/sfx/v_room_bed.opus",
+   "gain": 0.4,
+   "t0": "line:0-0.06",
+   "t1": "line:24+1.04",
+   "from": 0.0,
+   "loop": true,
+   "fade": 0.02
+  },
+  {
+   "file": "public/sfx/v_room_bed.opus",
+   "gain": 0.12,
+   "t0": "line:24+1.84",
+   "t1": "end",
+   "from": 4.91,
+   "loop": true,
+   "fade": 0.02
+  }
+ ],
+ "duck": {
+  "db": 3,
+  "music_db": 3,
+  "smooth": 0.15,
+  "fx_db": 9,
+  "fx_gap": 5
+ }
+}

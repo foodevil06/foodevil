@@ -22,8 +22,9 @@ export const LowKey: React.FC<{x?: number; y?: number; r?: number; k?: number}> 
 // smirk 0..1 a closed-mouth smile (the double), glint 0..1 an unnatural shine in the eyes, age 0..1 the old one from the
 // wardrobe (grey hair, lines, bags under sunken eyes)
 export type PersonSpec = {id: string; x: number; y: number; s?: number; phone?: 'ear' | 'chest' | 'none'; glow?: number; smile?: number; talk?: number; look?: number; full?: boolean;
-  smirk?: number; glint?: number; age?: number; wrong?: number};  // wrong 0..1: black sockets, pinpoint eyes, a grin wider than the face
-export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', glow = 1, smile = 0, talk = 0, look = 0, full = false, smirk = 0, glint = 0, age = 0, wrong = 0}) => {
+  smirk?: number; glint?: number; age?: number; wrong?: number; courier?: boolean};
+// wrong 0..1: black sockets, pinpoint eyes, a grin wider than the face; courier: a reflective stripe and the black thermal bag in his hand
+export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', glow = 1, smile = 0, talk = 0, look = 0, full = false, smirk = 0, glint = 0, age = 0, wrong = 0, courier = false}) => {
   const lx = look * 14;
   // low-key: the screen lights only the cheek by the ear, or only the chin and the underside of the nose from below
   const light = phone === 'ear' ? {cx: 140, cy: -105, r: 125} : phone === 'chest' ? {cx: 0, cy: 0, r: 118} : {cx: 0, cy: -300, r: 10};
@@ -46,6 +47,9 @@ export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', g
       <path d="M -200 560 L -205 120 C -200 50 -120 20 -60 10 L 60 10 C 120 20 200 50 205 120 L 200 560 Z" fill={HOOD} />
       <path d="M -110 400 L 110 400 L 130 520 L -130 520 Z" fill={HOOD2} />
       {[-1, 1].map((k) => <g key={k}><line x1={k * 22} y1={30} x2={k * 27} y2={150} stroke="#9aa3b0" strokeWidth={5} /><rect x={k * 27 - 4} y={150} width={8} height={18} rx={3} fill="#c9ced6" /></g>)}
+      {courier && <><rect x={-203} y={250} width={406} height={26} fill="#9aa3b0" opacity={0.55} />
+        <g transform="translate(205 330)"><rect x={-20} y={-10} width={190} height={170} rx={16} fill="#050506" /><rect x={-20} y={-10} width={190} height={30} rx={12} fill="#141518" />
+          <rect x={20} y={-60} width={14} height={60} fill="#141518" /></g></>}
       {/* arms */}
       {phone === 'none' && [-1, 1].map((k) => <path key={k} d={`M ${k * 190} 90 C ${k * 235} 250 ${k * 235} 420 ${k * 220} 560`} stroke={HOOD} strokeWidth={78} fill="none" strokeLinecap="round" />)}
       {phone === 'ear' && <>

@@ -45,3 +45,13 @@ _tmp/vnutri3/*.mp4
 public/vnutri3/
 out/covers/
 _tmp/cover_*/
+_tmp/kv2/*/
+_tmp/kv3/*/
+_tmp/kv2/*.wav
+_tmp/kv3/*.wav
+_tmp/kv2/*.mp4
+_tmp/kv3/*.mp4
+_tmp/kvsfx/*.mp3
+_tmp/kvsfx/*.log
+public/vnutri2r/
+public/vnutri3r/
