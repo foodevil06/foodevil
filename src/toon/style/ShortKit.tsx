@@ -17,8 +17,9 @@ import {PAL, Silhouette, XRayBody} from './StyleKit';
 
 // ---------- hero A: the channel look ----------
 // slate hoodie (the rival's hero wears a navy jacket, so we stay off pure blue) and red drawstrings: the red thread is on the hero himself
-export const HERO_A = {hood: '#3b4656', hoodShade: '#2a3340', hoodDark: '#1c232d', string: '#dfe6ee', cord: PAL.thread};
-export const HERO_A_NAVY = {hood: '#2c3e5c', hoodShade: '#1f2d44', hoodDark: '#16202f', string: '#e8eef6', cord: PAL.thread};
+// `string` is the light stripe along the sleeves: here it equals the hoodie colour, so there is no stripe
+export const HERO_A = {hood: '#3b4656', hoodShade: '#2a3340', hoodDark: '#1c232d', string: '#3b4656', cord: PAL.thread};
+export const HERO_A_NAVY = {hood: '#2c3e5c', hoodShade: '#1f2d44', hoodDark: '#16202f', string: '#2c3e5c', cord: PAL.thread};
 
 type Face = Pick<HeroSpec, 'lid' | 'lidR' | 'brow' | 'browUp' | 'mouth' | 'mo' | 'pupil' | 'lookX' | 'lookY' | 'tilt' | 'blush' | 'bags' | 'slump' | 'nod' | 'turn'>;
 export const EMO = {
@@ -81,10 +82,11 @@ export const HeroA: React.FC<HeroAProps> = ({id, x, y, s = 1, t, emo = 'calm', p
   const breath = Math.sin((t * 2 * Math.PI) / 3.6);
   const lidBase = o.lid ?? face.lid ?? 0;
   const open = blinkOpen(t, id.length * 7 + 3);
-  const spec: HeroSpec = {id, x: x + sx, y, s, breath, rim: 0.55, rimColor: PAL.cold, pal, ...face, ...hands, ...o,
+  const spec: HeroSpec = {id, x: x + sx, y, s, breath, rim: 0, rimColor: PAL.cold, pal,   // no edge light unless a scene has a real light source (o={{rim: 0.6}})
+    ...face, ...hands, ...o,
     lid: 1 - (1 - lidBase) * open, lidR: face.lidR !== undefined || o.lidR !== undefined ? 1 - (1 - (o.lidR ?? face.lidR ?? 0)) * open : undefined};
   const arm = (h: Hand | null | undefined) => (h ? {x: h.x, y: h.y} : null);
-  if (mode === 'shadow') return <Silhouette x={x + sx} y={y} s={s} lookX={spec.lookX} lookY={spec.lookY} tilt={spec.tilt} handL={arm(spec.handL)} handR={arm(spec.handR)} />;
+  if (mode === 'shadow') return <Silhouette rim="none" x={x + sx} y={y} s={s} lookX={spec.lookX} lookY={spec.lookY} tilt={spec.tilt} handL={arm(spec.handL)} handR={arm(spec.handR)} />;
   if (mode === 'xray') return <XRayBody x={x + sx} y={y} s={s} handL={arm(spec.handL)} handR={arm(spec.handR)} hot={hot} />;
   if (mode === 'split') return (
     <g>
