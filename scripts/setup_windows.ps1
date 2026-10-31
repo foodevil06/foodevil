@@ -38,7 +38,8 @@ npm install
 py -3.12 -m pip install --user --upgrade faster-whisper numpy
 
 Write-Host 'Claude Code и Codex CLI ...'
-npm install -g @anthropic-ai/claude-code @openai/codex
+npm install -g @openai/codex
+npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code   # npm 11 blocks its postinstall otherwise
 
 if (-not (Test-Path (Join-Path $Repo '.env'))) {
   Write-Host 'Создай в папке проекта файл .env со строкой LUMEAN_API_KEY=твой_ключ (для озвучки).' -ForegroundColor Yellow
