@@ -22,6 +22,7 @@ import {LookFast, LookMid, LookHeavy, LT_FPS, LT_SEC} from './toon/episodes/Look
 import {StylePuppet, StyleLino, StyleXray, ST_FPS, ST_SEC} from './toon/episodes/StyleTrio';
 import {LinoKnock, LinoElevator, LinoPhoto, LinoGames, LB_FPS, LB_SEC} from './toon/episodes/LinoBatch1';
 import {LinoBell, LinoSteps, LinoWindow, LinoCloset, LinoNight, LB2_SEC, NIGHT_SEC} from './toon/episodes/LinoBatch2';
+import {NightCover} from './toon/episodes/NightCover';
 import {ShortKitDemo, ShortKitSheet, KD_FPS, KD_SEC} from './toon/episodes/ShortKitDemo';
 
 export const Root: React.FC = () => (
@@ -71,6 +72,7 @@ export const Root: React.FC = () => (
     <Composition id="LinoWindow" component={LinoWindow} width={1080} height={1920} fps={30} durationInFrames={Math.round(LB2_SEC.window * 30)} />
     <Composition id="LinoCloset" component={LinoCloset} width={1080} height={1920} fps={30} durationInFrames={Math.round(LB2_SEC.closet * 30)} />
     <Composition id="LinoNight" component={LinoNight} width={1080} height={1920} fps={30} durationInFrames={Math.round(NIGHT_SEC * 30)} />
+    <Composition id="NightCover" component={NightCover} width={1280} height={720} fps={30} durationInFrames={1} />
     <Composition id="StylePuppet" component={StylePuppet} width={1080} height={1920} fps={ST_FPS} durationInFrames={ST_SEC * ST_FPS} />
     <Composition id="StyleLino" component={StyleLino} width={1080} height={1920} fps={ST_FPS} durationInFrames={ST_SEC * ST_FPS} />
     <Composition id="StyleXray" component={StyleXray} width={1080} height={1920} fps={ST_FPS} durationInFrames={ST_SEC * ST_FPS} />
