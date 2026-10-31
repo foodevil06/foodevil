@@ -19,10 +19,14 @@ CACHE = os.path.join(os.getcwd(), '.lumean.json')  # template ids per voice, so 
 
 
 def key():
-    k = os.environ.get('LUMEAN_API_KEY')
-    if not k and os.path.exists('.env'):
-        for ln in open('.env', encoding='utf-8'):
-            if ln.strip().startswith('LUMEAN_API_KEY='): k = ln.split('=', 1)[1].strip().strip('"\'')
+    k = (os.environ.get('LUMEAN_API_KEY') or '').strip()
+    # .env in the current folder or in the project root; utf-8-sig: Windows Notepad may save a BOM before the first line
+    for env in ('.env', os.path.join(HERE, '..', '.env'), '.env.txt', os.path.join(HERE, '..', '.env.txt')):
+        if k: break
+        if os.path.exists(env):
+            for ln in open(env, encoding='utf-8-sig', errors='ignore'):
+                ln = ln.strip().lstrip('\ufeff')
+                if ln.replace(' ', '').startswith('LUMEAN_API_KEY='): k = ln.split('=', 1)[1].strip().strip('"\'')
     if not k: sys.exit('LUMEAN_API_KEY not found: add it to the environment (or .env as LUMEAN_API_KEY=...)')
     return k
 
