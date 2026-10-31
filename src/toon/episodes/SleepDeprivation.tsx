@@ -255,10 +255,10 @@ export const SleepDeprivation: React.FC<{audio?: boolean; safe?: boolean; cover?
       <Cut t={t} from={S11} to={1e9}>
         <WorldCam cam={add(camAt(t, [[S11, {...MS, cy: 1050, z: 1.0}], [SLEEP_SEC, {...MS, cy: 1040, z: 0.86}]]), drift(t, 0.08))}>
           <Room L={room({t, wall: '#4a3f3c', sky: 2.2, cityLights: 0, lamp: 0, screen: 0, clock: 15, cans: 10, notes: 9, laptop: 'closed'} as RoomLook)}
-            hero={<Hero id="hs" {...HERO} breath={Math.sin((t * 2 * Math.PI) / 4.6)} {...D2} lid={1} mouth="open" mo={0.15} rest={1} tilt={6} slump={0.3}
+            hero={<Hero id="hs" {...HERO} breath={Math.sin((t * 2 * Math.PI) / 4.6)} {...D2} lid={1} mouth={t > W('сон', 21) ? 'smile' : 'open'} mo={0.15} rest={1} tilt={6} slump={0.3}
               handL={{x: -150, y: 200, grip: 'open', rot: 90}} handR={{x: 120, y: 214, grip: 'open', rot: 90}} />} />
         </WorldCam>
-        <AbsoluteFill style={{background: 'linear-gradient(120deg, rgba(255,214,150,0.35) 0%, rgba(255,214,150,0) 55%)', opacity: fadeK(t, S11, 1.2)}} />
+        <AbsoluteFill style={{background: 'linear-gradient(120deg, rgba(255,214,150,0.35) 0%, rgba(255,214,150,0) 55%)', opacity: fadeK(t, S11, 1.2) * (0.75 + 0.25 * ramp(t, W('сон', 21), SLEEP_SEC))}} />
         <Grade color="#ffd9a8" o={0.1} vignette={0.32} />
         <Tape k={fadeK(t, L(22).end + 0.3)} text="СОН НЕ ПАУЗА" y={430} rot={-2} />
       </Cut>
