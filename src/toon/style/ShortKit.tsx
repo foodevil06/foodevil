@@ -82,12 +82,12 @@ export const HeroA: React.FC<HeroAProps> = ({id, x, y, s = 1, t, emo = 'calm', p
   const breath = Math.sin((t * 2 * Math.PI) / 3.6);
   const lidBase = o.lid ?? face.lid ?? 0;
   const open = blinkOpen(t, id.length * 7 + 3);
-  const spec: HeroSpec = {id, x: x + sx, y, s, breath, rim: 0, rimColor: PAL.cold, pal,   // no edge light unless a scene has a real light source (o={{rim: 0.6}})
+  const spec: HeroSpec = {id, x: x + sx, y, s, breath, rim: 0, rimColor: PAL.cold, pal, body: 'legs', roundHands: true,   // no edge light unless a scene has a real light source (o={{rim: 0.6}})
     ...face, ...hands, ...o,
     lid: 1 - (1 - lidBase) * open, lidR: face.lidR !== undefined || o.lidR !== undefined ? 1 - (1 - (o.lidR ?? face.lidR ?? 0)) * open : undefined};
   const arm = (h: Hand | null | undefined) => (h ? {x: h.x, y: h.y} : null);
-  if (mode === 'shadow') return <Silhouette rim="none" x={x + sx} y={y} s={s} lookX={spec.lookX} lookY={spec.lookY} tilt={spec.tilt} handL={arm(spec.handL)} handR={arm(spec.handR)} />;
-  if (mode === 'xray') return <XRayBody x={x + sx} y={y} s={s} handL={arm(spec.handL)} handR={arm(spec.handR)} hot={hot} />;
+  if (mode === 'shadow') return <Silhouette rim="none" legs x={x + sx} y={y} s={s} lookX={spec.lookX} lookY={spec.lookY} tilt={spec.tilt} handL={arm(spec.handL)} handR={arm(spec.handR)} />;
+  if (mode === 'xray') return <XRayBody legs x={x + sx} y={y} s={s} handL={arm(spec.handL)} handR={arm(spec.handR)} hot={hot} />;
   if (mode === 'split') return (
     <g>
       <defs>
@@ -95,7 +95,7 @@ export const HeroA: React.FC<HeroAProps> = ({id, x, y, s = 1, t, emo = 'calm', p
         <clipPath id={`${id}-r`}><rect x={scan} y={-2000} width={4000} height={6000} /></clipPath>
       </defs>
       <g clipPath={`url(#${id}-l)`}><Hero {...spec} /></g>
-      <g clipPath={`url(#${id}-r)`}><XRayBody x={x + sx} y={y} s={s} handL={arm(spec.handL)} handR={arm(spec.handR)} hot={hot} /></g>
+      <g clipPath={`url(#${id}-r)`}><XRayBody legs x={x + sx} y={y} s={s} handL={arm(spec.handL)} handR={arm(spec.handR)} hot={hot} /></g>
       <rect x={scan - 4} y={y - 330 * s} width={8} height={960 * s} rx={4} fill={PAL.xLine} />
     </g>
   );

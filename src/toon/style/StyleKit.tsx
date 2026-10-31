@@ -39,9 +39,20 @@ export const Thread: React.FC<{pts: P[]; sag?: number; pins?: boolean; o?: numbe
   );
 };
 
+// legs in hero A's coordinates (hips at y 300, soles at about y 620), for the silhouette and the x-ray
+const LegsFlat: React.FC<{fill: string; edge?: string; bone?: boolean}> = ({fill, edge, bone}) => <>{[-1, 1].map((k) => {
+  const d = `M ${k * 52} 300 L ${k * 52} 572`;
+  return <g key={k}>
+    {edge && <path d={d} stroke={edge} strokeWidth={90} />}
+    <path d={d} stroke={fill} strokeWidth={edge ? 80 : 84} />
+    {bone && <><path d={`M ${k * 52} 330 L ${k * 50} 440 M ${k * 50} 466 L ${k * 52} 568`} stroke={PAL.xBone} strokeWidth={12} opacity={0.55} strokeLinecap="round" /><circle cx={k * 50} cy={453} r={11} fill={PAL.xBone} opacity={0.5} /></>}
+    <g transform={`translate(${k * 52} 590) scale(${k} 1)`}><path d="M -44 18 L -44 -4 Q -42 -26 -14 -28 L 20 -28 Q 58 -22 64 8 L 64 18 Z" fill={edge ? PAL.xBody : fill} stroke={edge} strokeWidth={edge ? 4.5 : 0} /></g>
+  </g>;
+})}</>;
+
 // ---------- hero B: a dark silhouette, white eyes, one red detail ----------
-export type FigSpec = {x: number; y: number; s?: number; lookX?: number; lookY?: number; tilt?: number; handL?: Arm; handR?: Arm; rim?: string};
-export const Silhouette: React.FC<FigSpec> = ({x, y, s = 1, lookX = 0, lookY = 0, tilt = 0, handL, handR, rim = PAL.cold}) => {
+export type FigSpec = {x: number; y: number; s?: number; lookX?: number; lookY?: number; tilt?: number; handL?: Arm; handR?: Arm; rim?: string; legs?: boolean};
+export const Silhouette: React.FC<FigSpec> = ({x, y, s = 1, lookX = 0, lookY = 0, tilt = 0, handL, handR, rim = PAL.cold, legs}) => {
   const body = '#05070b';
   const arm = (k: number, h: Arm) => {
     if (!h) return null;
@@ -56,7 +67,8 @@ export const Silhouette: React.FC<FigSpec> = ({x, y, s = 1, lookX = 0, lookY = 0
   };
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M -150 84 C -150 36 -110 14 -58 8 L 58 8 C 110 14 150 36 150 84 L 170 640 L -170 640 Z" fill={body} />
+      {legs && <LegsFlat fill={body} />}
+      <path d={`M -150 84 C -150 36 -110 14 -58 8 L 58 8 C 110 14 150 36 150 84 ${legs ? 'L 158 340 L -158 340 Z' : 'L 170 640 L -170 640 Z'}`} fill={body} />
       <path d="M 116 22 C 146 38 154 70 158 130" stroke={rim} strokeWidth={6} fill="none" opacity={0.7} strokeLinecap="round" />
       <rect x={-30} y={-40} width={60} height={56} fill={body} />
       <g transform={`translate(0 -150) rotate(${tilt})`}>
@@ -90,7 +102,7 @@ export const Pictogram: React.FC<FigSpec & {color?: string}> = ({x, y, s = 1, ti
 
 // ---------- the x-ray body, in hero A's coordinates (pose: tilt 0, turn 0) ----------
 // `hot` marks the parts the red thread runs through; the thread itself is drawn by the episode on top.
-export const XRayBody: React.FC<{x: number; y: number; s?: number; handL?: Arm; handR?: Arm; hot?: {brain?: boolean; hippo?: boolean}}> = ({x, y, s = 1, handL, handR, hot = {}}) => {
+export const XRayBody: React.FC<{x: number; y: number; s?: number; handL?: Arm; handR?: Arm; hot?: {brain?: boolean; hippo?: boolean}; legs?: boolean}> = ({x, y, s = 1, handL, handR, hot = {}, legs}) => {
   const sleeve = (k: number, h: Arm) => {
     if (!h) return null;
     const sh = {x: k * 126, y: 66}, {mid, end} = armPts(k, sh, h);
@@ -104,11 +116,15 @@ export const XRayBody: React.FC<{x: number; y: number; s?: number; handL?: Arm; 
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
       {/* torso: hoodie outline, ribs, lungs, heart, spine */}
-      <path d="M -150 84 C -150 36 -110 14 -58 8 L 58 8 C 110 14 150 36 150 84 L 176 620 L -176 620 Z" fill={PAL.xBody} stroke={PAL.xLine} strokeWidth={5} />
+      {legs && <LegsFlat fill={PAL.xBody} edge={PAL.xLine} bone />}
+      <path d={`M -150 84 C -150 36 -110 14 -58 8 L 58 8 C 110 14 150 36 150 84 ${legs ? 'L 158 340 Q 0 352 -158 340 Z' : 'L 176 620 L -176 620 Z'}`} fill={PAL.xBody} stroke={PAL.xLine} strokeWidth={5} />
+      <g transform={legs ? 'translate(0 150) scale(1 0.74) translate(0 -150)' : undefined}>
       {[-1, 1].map((k) => <path key={k} d={`M ${k * 14} 150 C ${k * 92} 120 ${k * 118} 210 ${k * 104} 330 C ${k * 92} 400 ${k * 36} 410 ${k * 18} 360 Z`} fill={PAL.lung} opacity={0.55} />)}
       {Array.from({length: 6}, (_, i) => [-1, 1].map((k) => <path key={`${i}${k}`} d={`M ${k * 10} ${120 + i * 46} C ${k * 70} ${100 + i * 46} ${k * 130} ${130 + i * 46} ${k * 126} ${170 + i * 48}`} stroke={PAL.xBone} strokeWidth={8} fill="none" opacity={0.42} strokeLinecap="round" />))}
       <path d="M -26 230 C -70 200 -86 260 -46 300 L -6 336 L 18 290 C 36 250 10 214 -26 230 Z" fill={PAL.heart} opacity={0.9} />
-      {Array.from({length: 13}, (_, i) => <rect key={i} x={-11} y={-40 + i * 40} width={22} height={30} rx={8} fill={PAL.xBone} opacity={0.55} />)}
+      </g>
+      {Array.from({length: legs ? 9 : 13}, (_, i) => <rect key={i} x={-11} y={-40 + i * 40} width={22} height={30} rx={8} fill={PAL.xBone} opacity={0.55} />)}
+      {legs && <path d="M -70 300 Q 0 270 70 300 L 56 330 Q 0 312 -56 330 Z" fill={PAL.xBone} opacity={0.45} />}
       {/* head: outline, skull, brain with folds, hippocampus, eyes */}
       <g transform="translate(0 -150)">
         <path d="M -118 -10 C -122 -92 -80 -140 0 -140 C 80 -140 122 -92 118 -10 C 114 72 70 126 0 129 C -70 126 -114 72 -118 -10 Z" fill={PAL.xBody} stroke={PAL.xLine} strokeWidth={5} />

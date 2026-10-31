@@ -7,7 +7,7 @@ import {clamp, ik2, lerp, P} from '../lib/anim';
 
 export const HC = {
   skin: '#f1c7a1', skinShade: '#d6a07c', pale: '#d2cbbd', paleShade: '#ada694', hair: '#261e1a', hood: '#d49a35',
-  hoodShade: '#a9741f', hoodDark: '#6f4c14', string: '#f6f0e4', cord: '#f6f0e4', ink: '#17120f', sclera: '#fbf7f0', bags: '#6a4a6c',
+  hoodShade: '#a9741f', hoodDark: '#6f4c14', string: '#f6f0e4', cord: '#f6f0e4', pants: '#1b2230', pantsShade: '#141a25', shoe: '#e6e9ee', sole: '#9aa3b1', ink: '#17120f', sclera: '#fbf7f0', bags: '#6a4a6c',
   vein: '#c8352d', mouth: '#3b1714', tongue: '#c4544a', blush: '#e88f7e',
 };
 
@@ -31,6 +31,9 @@ export type HeroSpec = {
   handL?: Hand | null; handR?: Hand | null;
   rim?: number; rimColor?: string; // cold edge light from the laptop
   blush?: number;
+  body?: 'robe' | 'legs';         // robe: the long hoodie to the frame edge (sleep video); legs: hoodie to the hips, trousers, sneakers
+  walk?: number;                   // legs only: stride phase in radians (0 = standing)
+  roundHands?: boolean;            // hands as plain circles, no fingers
   mid?: React.ReactNode;           // drawn after the body and before the arms (desk, steering wheel), in the hero's own coordinates
   headOnly?: boolean;
   pal?: Partial<typeof HC>;        // recolour the outfit or skin for another episode; the default is the sleep hero
@@ -72,13 +75,13 @@ const MouthShape: React.FC<{m: Mouth; mo: number; K: typeof HC}> = ({m, mo, K}) 
   return <g><ellipse cx={0} cy={10 + 10 * mo} rx={22 + 8 * mo} ry={14 + 34 * mo} fill={K.mouth} stroke={K.ink} strokeWidth={5} /><ellipse cx={0} cy={22 + 34 * mo} rx={16 + 4 * mo} ry={6 + 8 * mo} fill={K.tongue} /></g>;
 };
 
-const HandShape: React.FC<{p: P; h: Hand; skin: string; ang: number; K: typeof HC}> = ({p, h, skin, ang, K}) => (
+const HandShape: React.FC<{p: P; h: Hand; skin: string; ang: number; K: typeof HC; round?: boolean}> = ({p, h, skin, ang, K, round}) => (
   <g transform={`translate(${p.x} ${p.y}) rotate(${ang + (h.rot ?? 0)})`}>
     {h.hold === 'can' && <g transform="rotate(-90) translate(-6 -44)"><rect x={-22} y={-40} width={44} height={84} rx={8} fill="#2f6fd6" stroke={K.ink} strokeWidth={4} /><rect x={-22} y={-8} width={44} height={22} fill="#f2c541" /><rect x={-14} y={-46} width={28} height={8} rx={3} fill="#c9ced6" stroke={K.ink} strokeWidth={3} /></g>}
     {h.hold === 'mug' && <g transform="rotate(-90) translate(-4 -46)"><rect x={-30} y={-34} width={60} height={68} rx={10} fill="#e9e3d6" stroke={K.ink} strokeWidth={4} /><path d="M 30 -16 q 22 0 22 16 q 0 16 -22 16" stroke={K.ink} strokeWidth={6} fill="none" /></g>}
     {h.hold === 'phone' && <g transform="rotate(-90) translate(0 -40)"><rect x={-28} y={-52} width={56} height={104} rx={10} fill="#111318" stroke={K.ink} strokeWidth={4} /><rect x={-22} y={-44} width={44} height={86} rx={6} fill="#9fc3ff" opacity={0.85} /></g>}
     <circle cx={0} cy={0} r={30} fill={skin} stroke={K.ink} strokeWidth={4.5} />
-    {h.grip === 'open'
+    {round ? null : h.grip === 'open'
       ? <g fill={skin} stroke={K.ink} strokeWidth={4}>{[-16, 0, 16].map((y) => <ellipse key={y} cx={30} cy={y} rx={14} ry={8} />)}<ellipse cx={4} cy={-28} rx={9} ry={13} /></g>
       : <ellipse cx={8} cy={-24} rx={10} ry={8} fill={skin} stroke={K.ink} strokeWidth={4} />}
   </g>
@@ -134,16 +137,38 @@ export const Hero: React.FC<HeroSpec> = (o) => {
         {/* a light stripe along the sleeve: the pose reads on any background */}
         <path d={`M ${sh.x} ${sh.y} L ${mid.x} ${mid.y} L ${end.x} ${end.y}`} stroke={K.string} strokeWidth={6} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={0.85} />
         <circle cx={lerp(mid.x, end.x, 0.86)} cy={lerp(mid.y, end.y, 0.86)} r={27} fill={K.hoodShade} stroke={K.ink} strokeWidth={4} />
-        <HandShape p={end} h={h} skin={skin} ang={ang} K={K} />
+        <HandShape p={end} h={h} skin={skin} ang={ang} K={K} round={o.roundHands} />
       </g>
     );
   };
+  // legs: trousers from the hips, sneakers; `walk` swings them (one foot lifts while it moves forward)
+  const legs = o.body === 'legs';
+  const legsNode = legs && [-1, 1].map((k) => {
+    const ph = (o.walk ?? 0) + (k > 0 ? Math.PI : 0), w = o.walk !== undefined && o.walk !== 0;
+    const a = w ? Math.sin(ph) * 0.24 : 0, lift = w ? Math.max(0, Math.cos(ph)) * 16 : 0;
+    const hx = k * 52, hy = 300, L = 272, ax = hx + Math.sin(a) * L, ay = hy + Math.cos(a) * L - lift;
+    const leg = `M ${hx} ${hy} L ${ax} ${ay}`;
+    return <g key={k}>
+      <path d={leg} stroke={K.ink} strokeWidth={90} />
+      <path d={leg} stroke={K.pants} strokeWidth={81} />
+      <path d={`M ${hx + k * 26} ${hy + 20} L ${ax + k * 26} ${ay - 10}`} stroke={K.pantsShade} strokeWidth={14} opacity={0.8} />
+      <g transform={`translate(${ax} ${ay + 18}) scale(${k} 1)`}>
+        <path d="M -44 18 L -44 -4 Q -42 -26 -14 -28 L 20 -28 Q 58 -22 64 8 L 64 18 Z" fill={K.shoe} stroke={K.ink} strokeWidth={4.5} strokeLinejoin="round" />
+        <rect x={-44} y={10} width={108} height={10} rx={4} fill={K.sole} stroke={K.ink} strokeWidth={3.5} />
+      </g>
+    </g>;
+  });
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
-      {/* torso: the hoodie, collar and drawstrings */}
-      <path d={`M -150 ${84 + sy} C -150 ${36 + sy} -110 ${14 + sy * 0.6} -58 ${8 + sy * 0.4} L 58 ${8 + sy * 0.4} C 110 ${14 + sy * 0.6} 150 ${36 + sy} 150 ${84 + sy} L 176 620 L -176 620 Z`}
+      {legs && legsNode}
+      {/* torso: the hoodie, collar and drawstrings (to the frame edge, or to the hips when the legs are shown) */}
+      <path d={`M -150 ${84 + sy} C -150 ${36 + sy} -110 ${14 + sy * 0.6} -58 ${8 + sy * 0.4} L 58 ${8 + sy * 0.4} C 110 ${14 + sy * 0.6} 150 ${36 + sy} 150 ${84 + sy} ${legs ? 'L 158 330 Q 0 346 -158 330 Z' : 'L 176 620 L -176 620 Z'}`}
         fill={K.hood} stroke={K.ink} strokeWidth={5} transform={`scale(${1 + breath * 0.006} 1)`} />
-      <path d={`M 128 ${90 + sy} L 150 600`} stroke={K.hoodShade} strokeWidth={26} opacity={0.7} />
+      <path d={`M 128 ${90 + sy} L ${legs ? '142 306' : '150 600'}`} stroke={K.hoodShade} strokeWidth={26} opacity={0.7} />
+      {legs && <>
+        <path d="M -88 228 L 88 228 L 106 300 L -106 300 Z" fill={K.hoodShade} opacity={0.55} stroke={K.ink} strokeWidth={3.5} strokeLinejoin="round" />
+        <path d="M -156 306 L 156 306 L 158 330 Q 0 346 -158 330 Z" fill={K.hoodShade} stroke={K.ink} strokeWidth={4.5} strokeLinejoin="round" />
+      </>}
       {rim > 0 && <path d={`M 112 ${22 + sy} C 146 ${40 + sy} 152 ${70 + sy} 156 ${120 + sy}`} stroke={rimColor} strokeWidth={7} fill="none" opacity={0.7 * rim} strokeLinecap="round" />}
       <rect x={-31} y={-42} width={62} height={56} fill={skinShade} stroke={K.ink} strokeWidth={4.5} />
       <path d="M -82 12 C -62 58 62 58 82 12 C 62 -8 -62 -8 -82 12 Z" fill={K.hoodShade} stroke={K.ink} strokeWidth={4.5} />
