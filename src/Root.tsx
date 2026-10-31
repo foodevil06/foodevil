@@ -17,6 +17,7 @@ import {Vnutri2R, VN2R_FPS, VN2R_SEC} from './toon/episodes/Vnutri2R';
 import {Vnutri3R, VN3R_FPS, VN3R_SEC} from './toon/episodes/Vnutri3R';
 import {SleepDeprivation, SLEEP_FPS, SLEEP_SEC} from './toon/episodes/SleepDeprivation';
 import {StickExample, StickPoses, InfoCards, SX_FPS, SX_SEC} from './toon/episodes/StickExample';
+import {StyleSheet} from './toon/episodes/StyleSheet';
 
 export const Root: React.FC = () => (
   <>
@@ -55,5 +56,6 @@ export const Root: React.FC = () => (
     <Composition id="SleepDeprivation" component={SleepDeprivation} width={1080} height={1920} fps={SLEEP_FPS} durationInFrames={Math.round(SLEEP_SEC * SLEEP_FPS)} defaultProps={{audio: true}} />
     <Composition id="SleepDeprivationSafe" component={SleepDeprivation} width={1080} height={1920} fps={SLEEP_FPS} durationInFrames={Math.round(SLEEP_SEC * SLEEP_FPS)} defaultProps={{audio: false, safe: true}} />
     <Composition id="SleepDeprivationCover" component={SleepDeprivation} width={1080} height={1920} fps={SLEEP_FPS} durationInFrames={1} defaultProps={{audio: false, cover: true}} />
+    <Composition id="StyleSheet" component={StyleSheet} width={1080} height={1920} fps={30} durationInFrames={4} />
   </>
 );
