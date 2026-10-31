@@ -24,7 +24,7 @@ const W = (w: string, from = 0) => voice.lines.slice(from).flatMap((l) => l.word
   .find((x) => x.w.toLowerCase().replace(/[«»"…:]/g, '').startsWith(w))!.t;
 const cut = (i: number) => L(i).start - 0.1;
 
-// the beats (vnutri3r.cues.json uses the same offsets)
+// the beats (vnutri3r.v2.cues.json uses the same offsets)
 const BAG = L(0).end + 0.15;                        // the bag pushed into your hands
 const APP = W('открылось', 4);                       // the courier app opens by itself
 const BLINK = W('моргаешь', 8) + 0.25;               // eyes shut for a moment
@@ -32,6 +32,9 @@ const KN = [0.3, 0.67, 1.04].map((d) => L(13).end + d);  // the three knocks of 
 const MEM = L(15).start - 0.05;                      // flashes of part 1: the peephole, the bag
 const THRU = W('сквозь', 19);                        // he looks through you
 const SIT = L(25).start;                             // through the crack: he goes back to the table and sits
+const SEATED = SIT + 2.4;                            // he is at the table: 23:51:10, the first frame of the video in part 1
+const VIB = L(14).start - 0.35;                      // the phone behind the door buzzes twice (kv_vib_muffled: 0-0.45 s, 0.5-1.0 s)
+const TITLE = L(22).start - 0.05;                    // «КУРЬЕР УЖЕ ВНУТРИ»: no subtitles over the title
 const SCR = L(28).end + 0.2;                         // «Подвинься» -> the screamer
 const NEXT = SCR + 0.8, QA = NEXT + 2.6, COVER = QA + 4.2;
 export const VN3R_SEC = Math.ceil((COVER + 0.2) * 10) / 10;
@@ -42,7 +45,29 @@ const Cut: React.FC<{t: number; from: number; to: number; children: React.ReactN
 const pulse = (t: number, at: number, k = 6) => (t >= at ? Math.exp(-k * (t - at)) : 0);
 const buzz = (t: number, at: number, d = 0.7) => (t >= at && t < at + d ? Math.sin((t - at) * 95) * (1 - (t - at) / d) : 0);
 const sq = (x: number) => clamp(x) ** 2;
-const stamp = (t: number) => { const s = 23 * 3600 + 51 * 60 + 10 + Math.max(0, t - SIT); return `30.10 ${String(Math.floor(s / 3600) % 24).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
+const stamp = (t: number) => { const s = 23 * 3600 + 51 * 60 + 10 + (t - SEATED); return `30.10 ${String(Math.floor(s / 3600) % 24).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
+
+// someone with a lit phone right behind your door: the light shows in the peephole and under the door only while the
+// phone buzzes (two short bursts); in the second one somebody leans to the peephole and blocks it for a moment (part 1:
+// «Ты смотришь в глазок»), feet shadows break the strip; then it is dark again
+const BehindDoor: React.FC<{t: number}> = ({t}) => {
+  const burst = (a: number, b: number) => ramp(t, a, a + 0.05) * (1 - ramp(t, b, b + 0.2));
+  const k = Math.max(burst(VIB, VIB + 0.45), burst(VIB + 0.5, VIB + 1.0));
+  const eye = ramp(t, VIB + 0.6, VIB + 0.66) * (1 - ramp(t, VIB + 0.88, VIB + 0.96));  // an eye at the peephole
+  if (k <= 0) return null;
+  const shift = t > VIB + 0.48 ? 6 : 0;  // he shifts his weight between the buzzes
+  return (
+    <svg width={1080} height={1920} style={{position: 'absolute'}}>
+      <defs><radialGradient id="bd-peep"><stop offset="0" stopColor="#dfe8ff" stopOpacity={0.55} /><stop offset="1" stopColor="#dfe8ff" stopOpacity={0} /></radialGradient></defs>
+      <circle cx={540} cy={640} r={70} fill="url(#bd-peep)" opacity={k * (1 - 0.55 * eye)} />
+      <circle cx={540} cy={640} r={10} fill="#e8f0ff" opacity={k * (1 - eye)} />
+      <ellipse cx={540} cy={1508} rx={330} ry={16} fill="#bcd0ff" opacity={0.18 * k} />
+      <rect x={280} y={1495} width={520} height={7} fill="#bcd0ff" opacity={0.75 * k} />
+      <rect x={452 + shift} y={1494} width={58} height={9} fill="#0a0b0d" opacity={k} />
+      <rect x={572 + shift} y={1494} width={58} height={9} fill="#0a0b0d" opacity={k} />
+    </svg>
+  );
+};
 
 export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = false, safe = false}) => {
   const f = useCurrentFrame();
@@ -55,7 +80,7 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
 
   return (
     <AbsoluteFill style={{background: V.black}}>
-      {audio && <Audio src={staticFile('vnutri3r/mix.wav')} />}
+      {audio && <Audio src={staticFile('vnutri3r/mix_v2.wav')} />}
 
       {/* 1. the last frame of part 2: his face. «Твоя смена.» He pushes the bag at you */}
       <Cut t={t} from={0} to={cut(1)}>
@@ -74,7 +99,7 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
         <Push t={t} t0={cut(3)} k={0.1}>
           <AbsoluteFill style={{background: '#0a0b0d'}}>
             <Phone x={540} y={860} w={560} rot={-2 + 1.3 * buzz(t, L(3).start)}>
-              {t < APP ? <LockContent s={560 / 400} time="23:58" date="суббота, 31 октября" notes={<Notif k={easeOut((t - L(3).start) / 0.3)} title="Доставка" text="Новая смена для вас" scale={560 / 400} />} />
+              {t < APP ? <LockContent s={560 / 400} time="23:58" date="пятница, 30 октября" notes={<Notif k={easeOut((t - L(3).start) / 0.3)} title="Доставка" text="Новая смена для вас" scale={560 / 400} />} />
                 : <ShiftContent s={560 / 400} t={t} at={L(5).start} rows={[W('ты', 6), W('адрес', 6), W('время', 6)]} clock="23:58" />}
             </Phone>
             <LowKey x={540} y={860} r={72} k={0.82} />
@@ -94,15 +119,17 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
       <Cut t={t} from={cut(10)} to={MEM}>
         <Push t={t} t0={cut(10)} k={0.1} shake={0.6 * KN.reduce((a, k) => a + pulse(t, k, 8), 0)}>
           <DoorFromLanding t={t} open={0} flex={KN.reduce((a, k) => a + pulse(t, k, 8), 0)} />
+          <BehindDoor t={t} />
         </Push>
-        <AbsoluteFill style={{transform: `translateY(${lerp(1400, 0, ramp(t, L(12).start - 0.3, L(12).start + 0.2, easeOut))}px)`}}>
-          <Phone x={790} y={1120} w={240} rot={-6}><LockContent s={240 / 400} time="23:47" date="" notes={<Notif k={easeOut((t - W('постучите', 12) + 0.1) / 0.25)} title="Постучите" red scale={240 / 400} />} /></Phone>
+        {/* the courier's phone: readable, inside the safe area; put away on «Ты стучишь» so the door is clear for the knocks */}
+        <AbsoluteFill style={{transform: `translateY(${lerp(1400, 0, ramp(t, L(12).start - 0.3, L(12).start + 0.2, easeOut)) + 1400 * ramp(t, L(13).start, L(13).start + 0.45, sq)}px)`}}>
+          <Phone x={700} y={1000} w={380} rot={-6}><LockContent s={380 / 400} time="23:49" date="" notes={<Notif k={easeOut((t - W('постучите', 12) + 0.1) / 0.25)} title="Вы на месте" text="ПОСТУЧИТЕ" red hot scale={380 / 400} />} /></Phone>
         </AbsoluteFill>
       </Cut>
       {/* you remember what happens next (part 1: the peephole, the bag) */}
       <Cut t={t} from={MEM} to={MEM + 0.8}><AbsoluteFill style={{filter: 'grayscale(1) brightness(0.9)'}}><Peephole t={t} /></AbsoluteFill><Vhs k={1.2} /></Cut>
       <Cut t={t} from={MEM + 0.8} to={cut(16)}><AbsoluteFill style={{filter: 'grayscale(1) brightness(0.9)'}}><Landing t={t} open={1} tilt={1} lift={0} /></AbsoluteFill><Vhs k={1.2} /></Cut>
-      <Cut t={t} from={cut(16)} to={cut(17)}><Push t={t} t0={cut(16)} k={0.06}><Landing t={t} open={1} tilt={1} lift={0} /></Push></Cut>
+      <Cut t={t} from={cut(16)} to={cut(17)}><Push t={t} t0={cut(16)} k={0.06}><Landing t={t} open={1} tilt={1} lift={1 - ramp(t, W('кладёшь', 16), W('кладёшь', 16) + 0.6, easeInOut)} /></Push></Cut>
 
       {/* 4. the door opens: him. He looks straight through you. Nobody ever sees the courier */}
       <Cut t={t} from={cut(17)} to={THRU - 0.05}>
@@ -110,7 +137,7 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
       </Cut>
       <Cut t={t} from={THRU - 0.05} to={cut(21)}>
         <Push t={t} t0={THRU} k={0.14} shake={0.6 * pulse(t, THRU, 6)}>
-          <FaceClose t={t} f={f} warp={0} glint={0} smirk={0} person={{look: 0.9, glow: 1, wrong: 0.4}} blur={1.4} />
+          <FaceClose t={t} f={f} warp={0} glint={0} smirk={0} person={{look: 0.9, glow: 1}} blur={1.4} />
         </Push>
         <Flash t={t} at={THRU} d={0.08} color="#cfd8e6" />
       </Cut>
@@ -119,7 +146,7 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
       <Cut t={t} from={cut(21)} to={cut(24)}>
         <Corridor t={t} walk={ramp(t, L(21).start, L(22).end, easeInOut) * 0.4} wardrobe={ramp(t, L(23).start, L(23).end + 0.6, easeInOut)} ajar={ramp(t, L(23).end, L(23).end + 0.6)} />
         <LowKey x={560} y={900} r={70} k={0.8} />
-        <TitleDrop t={t} at={L(22).start - 0.05} d={1.8} />
+        <TitleDrop t={t} at={TITLE} d={1.8} />
       </Cut>
 
       {/* 6. inside the wardrobe: the old phone records; through the crack he sits down at the table, back to you —
@@ -127,12 +154,16 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
       <Cut t={t} from={cut(24)} to={L(28).start - 0.25}>
         <AbsoluteFill style={{filter: `grayscale(${0.3 + 0.5 * ramp(t, L(26).start, L(26).end)})`}}>
           <SlitPOV t={t} gap={0.5 - 0.46 * ramp(t, L(27).start, L(28).start - 0.4, easeInOut)} rec={t < L(27).start + 1} stamp={stamp(t)}>
-            <AbsoluteFill style={{filter: 'brightness(1.3)'}}><Room t={t} hero={{walk: 1 - ret, stand: 1 - sit}} phoneGlow={sit} lamp={0.6} /></AbsoluteFill>
+            {/* the camera looks a little lower: he sits above the subtitles; the room itself is unchanged, the strip below is floor */}
+            <AbsoluteFill style={{filter: 'brightness(1.3)'}}>
+              <AbsoluteFill style={{background: V.floor}} />
+              <AbsoluteFill style={{transform: 'translateY(-340px)'}}><Room t={t} hero={{walk: 1 - ret, stand: 1 - sit}} phoneGlow={sit} lamp={0.6} /></AbsoluteFill>
+            </AbsoluteFill>
           </SlitPOV>
         </AbsoluteFill>
         <Vhs k={0.5 + 0.5 * ramp(t, L(26).start, L(26).end)} />
         {/* a pale face, barely there, right behind you */}
-        <AbsoluteFill style={{opacity: 0.12 * ramp(t, L(27).start + 1.2, L(28).start - 0.4), transform: 'translateX(380px) scale(1.4)', transformOrigin: '540px 760px'}}>
+        <AbsoluteFill style={{opacity: 0.12 * ramp(t, L(27).start + 1.2, L(28).start - 0.4), transform: 'translateX(200px) scale(1.2)', transformOrigin: '540px 760px'}}>
           <FaceClose t={t} f={f} warp={0} glint={0} smirk={0} person={{wrong: 1, smile: 0.6, age: 0.35}} />
         </AbsoluteFill>
       </Cut>
@@ -161,7 +192,7 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
       <Cut t={t} from={COVER} to={1e9}><VnutriCover3 /></Cut>
 
       <Grain f={f} k={0.07} />
-      {t < L(28).end + 0.2 && <CaseSubs lines={voice.lines} f={f} fps={fps} total={voice.total} tone={(i) => TONE[i] ?? 'white'} />}
+      {t < L(28).end + 0.2 && !(t >= TITLE && t < TITLE + 1.8) && <CaseSubs lines={voice.lines} f={f} fps={fps} total={voice.total} tone={(i) => TONE[i] ?? 'white'} />}
       {safe && <SafeZones />}
     </AbsoluteFill>
   );
