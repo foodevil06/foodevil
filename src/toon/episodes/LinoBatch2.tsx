@@ -231,6 +231,43 @@ const Ending: React.FC = () => {
     </AbsoluteFill>
   );
 };
+// a Shorts part (under 3 minutes): some of the stories, the print between them, the ending, then 0.6 s of the vertical cover
+const COVER_SEC = 0.6;
+const layout = (ids: number[]) => {
+  const st = ids.reduce<number[]>((a, id, i) => [...a, i === 0 ? 0 : a[i - 1] + STORIES[ids[i - 1]].sec + GAP], []);
+  const endAt = st[st.length - 1] + STORIES[ids[ids.length - 1]].sec + GAP;
+  return {st, endAt, total: endAt + END_SEC + COVER_SEC};
+};
+export const PARTS = [[0, 1, 2, 3], [4, 5, 6]];
+export const PART_SEC = PARTS.map((ids) => layout(ids).total);
+export const NightCoverV: React.FC<{part: number}> = ({part}) => (
+  <AbsoluteFill style={{background: LI.ink, overflow: 'hidden'}}>
+    <Img src={staticFile('channel/cover_art.png')} style={{position: 'absolute', height: 1920, width: 1920 * 1672 / 941, left: -2019, top: 120}} />
+    <AbsoluteFill style={{background: 'linear-gradient(180deg, rgba(21,18,14,0.95) 0%, rgba(21,18,14,0.6) 26%, rgba(21,18,14,0) 42%, rgba(21,18,14,0) 70%, rgba(21,18,14,0.85) 100%)'}} />
+    <div style={{position: 'absolute', left: 0, right: 0, top: 150, textAlign: 'center', fontFamily: MONT, fontWeight: 900, lineHeight: 0.95, textShadow: '0 8px 0 rgba(0,0,0,0.6)'}}>
+      <div style={{fontSize: 170, color: LI.paper}}>НЕ</div>
+      <div style={{fontSize: 170, color: LI.red}}>СМОТРИ</div>
+    </div>
+    <div style={{position: 'absolute', left: 0, right: 0, top: 1450, textAlign: 'center'}}>
+      <span style={{fontFamily: MONO, fontSize: 52, letterSpacing: 6, color: LI.paper, background: 'rgba(0,0,0,0.6)', border: `3px solid ${LI.red}`, padding: '8px 28px'}}>ЧАСТЬ {part}</span>
+    </div>
+  </AbsoluteFill>
+);
+export const LinoNightPart: React.FC<{part: number}> = ({part}) => {
+  const ids = PARTS[part - 1], {st, endAt} = layout(ids);
+  const f = useCurrentFrame(), t = f / LB_FPS;
+  const marks = [...st.slice(1).map((s) => s - GAP), endAt - GAP];
+  return (
+    <AbsoluteFill style={{background: LI.ink}}>
+      <svg width={0} height={0}><LinoDefs /></svg>
+      {ids.map((id, i) => { const {C, sec} = STORIES[id]; return <Sequence key={i} from={Math.round(st[i] * LB_FPS)} durationInFrames={Math.round(sec * LB_FPS)}><C /></Sequence>; })}
+      {marks.map((a, i) => <Sequence key={`p${i}`} from={Math.round(a * LB_FPS)} durationInFrames={Math.round(GAP * LB_FPS)}><Audio src={staticFile('sfx/paper.opus')} volume={0.5} /></Sequence>)}
+      <Sequence from={Math.round(endAt * LB_FPS)} durationInFrames={Math.round(END_SEC * LB_FPS)}><Ending /></Sequence>
+      <Sequence from={Math.round((endAt + END_SEC) * LB_FPS)}><NightCoverV part={part} /></Sequence>
+      {marks.map((a, i) => <PrintSheet key={i} k={clamp((t - a) / GAP)} />)}
+    </AbsoluteFill>
+  );
+};
 export const LinoNight: React.FC = () => {
   const f = useCurrentFrame(), t = f / LB_FPS;
   const endAt = starts[starts.length - 1] + STORIES[STORIES.length - 1].sec + GAP;
