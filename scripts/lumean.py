@@ -86,7 +86,10 @@ def cmd_check(a):
     print('key ok:', k.get('name'), '| permissions:', ', '.join(k.get('permissions') or []))
     try:
         for u in call('GET', '/usage').get('data') or []:
-            print(' ', u.get('service') or u.get('service_key'), 'tokens left:', u.get('tokens_remaining'))
+            name = u.get('service_name') or u.get('service') or u.get('service_code') or u.get('service_key')
+            left = u.get('remaining', u.get('tokens_remaining'))
+            kind = {'hourly': 'в час', 'concurrent': 'одновременно', 'daily': 'в день', 'monthly': 'в месяц'}.get(u.get('limit_type'), u.get('limit_type') or '')
+            print(f"  {name}: свободно {left} из {u.get('limit_value', '?')} {kind}".rstrip())
     except SystemExit as e: print('usage: n/a', str(e)[:120])
 
 
