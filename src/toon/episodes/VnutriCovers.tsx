@@ -4,7 +4,19 @@ import React from 'react';
 import {AbsoluteFill, useCurrentFrame} from 'remotion';
 import {Cover, EndQuestion} from '../case/Covers';
 import {WardrobeFront, FaceClose} from '../case/VnutriEnd';
+import {Table, Phone, LockContent, Notif} from '../case/Vnutri';
 import {Grain} from '../case/Hybrid';
+
+export const VnutriCover1: React.FC = () => (
+  <AbsoluteFill>
+    <Cover series="КУРЬЕР УЖЕ ВНУТРИ" part={1} hook="ЗАКАЗ *ИЗ БУДУЩЕГО*"
+      art={<AbsoluteFill><Table t={0} /><Phone x={540} y={1180} w={460} rot={-5}>
+        <LockContent s={460 / 400} time="23:47" date="пятница, 30 октября"
+          notes={<Notif k={1} title="Ваш заказ передан курьеру" text="Отправитель: —" red scale={460 / 400} />} />
+      </Phone></AbsoluteFill>} />
+    <Grain f={1} k={0.06} />
+  </AbsoluteFill>
+);
 
 export const VnutriCover2: React.FC = () => (
   <AbsoluteFill>
