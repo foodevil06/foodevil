@@ -36,7 +36,7 @@ def call(method, path, body=None, raw_url=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method, headers={'X-API-KEY': key(), 'Accept': 'application/json',
                                                                           **({'Content-Type': 'application/json'} if data else {})})
-    for attempt in range(4):
+    for attempt in range(10):   # the connection often drops behind a VPN: retry instead of ordering again
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 return json.load(r)
@@ -47,14 +47,21 @@ def call(method, path, body=None, raw_url=None):
             if e.code == 429 and e.headers.get('Retry-After'):
                 time.sleep(min(60, int(e.headers['Retry-After']))); continue
             sys.exit(f'{method} {path}: HTTP {e.code} {j.get("reason") or ""} {j.get("message") or ""}\n{json.dumps(j.get("errors") or {}, ensure_ascii=False)[:600]}')
-        except urllib.error.URLError as e:
-            if attempt == 3: sys.exit(f'{method} {path}: {e}')
-            time.sleep(2 ** attempt)
+        except (urllib.error.URLError, ConnectionError, TimeoutError, OSError) as e:
+            if attempt == 9: sys.exit(f'{method} {path}: {e}')
+            time.sleep(min(20, 2 + attempt * 2))
 
 
 def download(url, out):
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    with urllib.request.urlopen(url, timeout=300) as r, open(out, 'wb') as f: f.write(r.read())
+    for attempt in range(10):
+        try:
+            with urllib.request.urlopen(url, timeout=300) as r: data = r.read()
+            break
+        except (urllib.error.URLError, ConnectionError, TimeoutError, OSError):
+            if attempt == 9: raise
+            time.sleep(min(20, 2 + attempt * 2))
+    open(out, 'wb').write(data)
 
 
 def wait_order(oid, label):
