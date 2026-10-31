@@ -7,7 +7,7 @@ import {clamp, ik2, lerp, P} from '../lib/anim';
 
 export const HC = {
   skin: '#f1c7a1', skinShade: '#d6a07c', pale: '#d2cbbd', paleShade: '#ada694', hair: '#261e1a', hood: '#d49a35',
-  hoodShade: '#a9741f', hoodDark: '#6f4c14', string: '#f6f0e4', ink: '#17120f', sclera: '#fbf7f0', bags: '#6a4a6c',
+  hoodShade: '#a9741f', hoodDark: '#6f4c14', string: '#f6f0e4', cord: '#f6f0e4', ink: '#17120f', sclera: '#fbf7f0', bags: '#6a4a6c',
   vein: '#c8352d', mouth: '#3b1714', tongue: '#c4544a', blush: '#e88f7e',
 };
 
@@ -147,7 +147,7 @@ export const Hero: React.FC<HeroSpec> = (o) => {
       {rim > 0 && <path d={`M 112 ${22 + sy} C 146 ${40 + sy} 152 ${70 + sy} 156 ${120 + sy}`} stroke={rimColor} strokeWidth={7} fill="none" opacity={0.7 * rim} strokeLinecap="round" />}
       <rect x={-31} y={-42} width={62} height={56} fill={skinShade} stroke={K.ink} strokeWidth={4.5} />
       <path d="M -82 12 C -62 58 62 58 82 12 C 62 -8 -62 -8 -82 12 Z" fill={K.hoodShade} stroke={K.ink} strokeWidth={4.5} />
-      {[-1, 1].map((k) => <g key={k}><path d={`M ${k * 22} 44 Q ${k * 26} 120 ${k * 28} 196`} stroke={K.string} strokeWidth={7} fill="none" strokeLinecap="round" /><rect x={k * 28 - 6} y={194} width={12} height={20} rx={4} fill={K.string} /></g>)}
+      {[-1, 1].map((k) => <g key={k}><path d={`M ${k * 22} 44 Q ${k * 26} 120 ${k * 28} 196`} stroke={K.cord} strokeWidth={7} fill="none" strokeLinecap="round" /><rect x={k * 28 - 6} y={194} width={12} height={20} rx={4} fill={K.cord} /></g>)}
       {o.mid}
       {rest > 0.5
         ? <>{arm(-1, o.handL)}{arm(1, o.handR)}{head}</>   /* asleep: the head lies on top of the arms */

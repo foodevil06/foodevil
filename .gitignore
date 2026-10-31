@@ -67,3 +67,6 @@ _tmp/sleep/*.mp4
 _tmp/sleep/*.log
 _tmp/sleep/*.png
 _tmp/sleep/cover/
+out/bench.mp4
+_tmp/rival/
+_tmp/kit/
