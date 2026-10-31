@@ -55,3 +55,4 @@ _tmp/kvsfx/*.mp3
 _tmp/kvsfx/*.log
 public/vnutri2r/
 public/vnutri3r/
+out/*.zip
