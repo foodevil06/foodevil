@@ -57,3 +57,12 @@ public/vnutri2r/
 public/vnutri3r/
 out/*.zip
 out/proverka_*.jpg
+public/sleep/
+_tmp/sleep/voice/
+_tmp/sleep/sfx_raw/
+_tmp/sleep/mixwork/
+_tmp/sleep/stills*/
+_tmp/sleep/*.wav
+_tmp/sleep/*.mp4
+_tmp/sleep/*.log
+_tmp/sleep/*.png

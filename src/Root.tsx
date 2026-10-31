@@ -15,6 +15,7 @@ import {VnutriCover1, VnutriCover2, VnutriCover3, VnutriEndCard} from './toon/ep
 import {AvatarKeyhole, AvatarEye} from './toon/case/Covers';
 import {Vnutri2R, VN2R_FPS, VN2R_SEC} from './toon/episodes/Vnutri2R';
 import {Vnutri3R, VN3R_FPS, VN3R_SEC} from './toon/episodes/Vnutri3R';
+import {SleepDeprivation, SLEEP_FPS, SLEEP_SEC} from './toon/episodes/SleepDeprivation';
 import {StickExample, StickPoses, InfoCards, SX_FPS, SX_SEC} from './toon/episodes/StickExample';
 
 export const Root: React.FC = () => (
@@ -51,5 +52,8 @@ export const Root: React.FC = () => (
     <Composition id="Vnutri2RSafe" component={Vnutri2R} width={1080} height={1920} fps={VN2R_FPS} durationInFrames={Math.round(VN2R_SEC * VN2R_FPS)} defaultProps={{audio: false, safe: true}} />
     <Composition id="Vnutri3R" component={Vnutri3R} width={1080} height={1920} fps={VN3R_FPS} durationInFrames={Math.round(VN3R_SEC * VN3R_FPS)} defaultProps={{audio: true}} />
     <Composition id="Vnutri3RSafe" component={Vnutri3R} width={1080} height={1920} fps={VN3R_FPS} durationInFrames={Math.round(VN3R_SEC * VN3R_FPS)} defaultProps={{audio: false, safe: true}} />
+    <Composition id="SleepDeprivation" component={SleepDeprivation} width={1080} height={1920} fps={SLEEP_FPS} durationInFrames={Math.round(SLEEP_SEC * SLEEP_FPS)} defaultProps={{audio: true}} />
+    <Composition id="SleepDeprivationSafe" component={SleepDeprivation} width={1080} height={1920} fps={SLEEP_FPS} durationInFrames={Math.round(SLEEP_SEC * SLEEP_FPS)} defaultProps={{audio: false, safe: true}} />
+    <Composition id="SleepDeprivationCover" component={SleepDeprivation} width={1080} height={1920} fps={SLEEP_FPS} durationInFrames={1} defaultProps={{audio: false, cover: true}} />
   </>
 );
