@@ -12,6 +12,7 @@ import {Vnutri1, VN1_FPS, VN1_SEC} from './toon/episodes/Vnutri1';
 import {Vnutri2, VN2_FPS, VN2_SEC} from './toon/episodes/Vnutri2';
 import {Vnutri3, VN3_FPS, VN3_SEC} from './toon/episodes/Vnutri3';
 import {VnutriCover2, VnutriCover3, VnutriEndCard} from './toon/episodes/VnutriCovers';
+import {AvatarKeyhole, AvatarEye} from './toon/case/Covers';
 import {StickExample, StickPoses, InfoCards, SX_FPS, SX_SEC} from './toon/episodes/StickExample';
 
 export const Root: React.FC = () => (
@@ -41,5 +42,7 @@ export const Root: React.FC = () => (
     <Composition id="VnutriCover2" component={VnutriCover2} width={1080} height={1920} fps={30} durationInFrames={1} />
     <Composition id="VnutriCover3" component={VnutriCover3} width={1080} height={1920} fps={30} durationInFrames={1} />
     <Composition id="VnutriEndCard" component={VnutriEndCard} width={1080} height={1920} fps={30} durationInFrames={1} />
+    <Composition id="AvatarKeyhole" component={AvatarKeyhole} width={1080} height={1080} fps={30} durationInFrames={1} />
+    <Composition id="AvatarEye" component={AvatarEye} width={1080} height={1080} fps={30} durationInFrames={1} />
   </>
 );
