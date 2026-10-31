@@ -149,7 +149,7 @@ export const Vnutri2R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
 
       {/* the question card, then the cover */}
       <Cut t={t} from={QA} to={COVER}>
-        <EndQuestion t={t} at={QA} q="ВЗЯЛ БЫ *ПАКЕТ?*" a="ДА" b="БЕЖАЛ БЫ" next="ПОДПИШИСЬ — ЧАСТЬ 3 СКОРО" />
+        <EndQuestion t={t} at={QA} q="ВЗЯЛ БЫ *ПАКЕТ?*" a="ДА" b="БЕЖАЛ БЫ" next="ПОДПИШИСЬ, ЧАСТЬ 3 СКОРО" />
       </Cut>
       <Cut t={t} from={COVER} to={1e9}><VnutriCover2 /></Cut>
 

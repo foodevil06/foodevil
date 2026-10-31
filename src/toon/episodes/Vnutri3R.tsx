@@ -156,7 +156,7 @@ export const Vnutri3R: React.FC<{audio?: boolean; safe?: boolean}> = ({audio = f
         </AbsoluteFill>
       </Cut>
       <Cut t={t} from={QA} to={COVER}>
-        <EndQuestion t={t} at={QA} q="КТО ДЫШАЛ *В ШКАФУ?*" a="ЗАВТРАШНИЙ ТЫ" b="КТО-ТО ДРУГОЙ" next="ПОДПИШИСЬ — ЗАКАЗЫ ЕЩЁ БУДУТ" />
+        <EndQuestion t={t} at={QA} q="КТО ДЫШАЛ *В ШКАФУ?*" a="ЗАВТРАШНИЙ ТЫ" b="КТО-ТО ДРУГОЙ" next="ПОДПИШИСЬ, ЗАКАЗЫ ЕЩЁ БУДУТ" />
       </Cut>
       <Cut t={t} from={COVER} to={1e9}><VnutriCover3 /></Cut>
 

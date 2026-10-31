@@ -12,7 +12,7 @@ export const VnutriCover1: React.FC = () => (
     <Cover series="КУРЬЕР УЖЕ ВНУТРИ" part={1} hook="ЗАКАЗ *ИЗ БУДУЩЕГО*"
       art={<AbsoluteFill><Table t={0} /><Phone x={540} y={1180} w={460} rot={-5}>
         <LockContent s={460 / 400} time="23:47" date="пятница, 30 октября"
-          notes={<Notif k={1} title="Ваш заказ передан курьеру" text="Отправитель: —" red scale={460 / 400} />} />
+          notes={<Notif k={1} title="Ваш заказ передан курьеру" text="Отправитель не указан" red scale={460 / 400} />} />
       </Phone></AbsoluteFill>} />
     <Grain f={1} k={0.06} />
   </AbsoluteFill>
@@ -39,7 +39,7 @@ export const VnutriEndCard: React.FC = () => {
   return (
     <AbsoluteFill style={{background: '#050608'}}>
       <AbsoluteFill style={{opacity: 0.5}}><WardrobeFront t={1} ajar={0.3} light={0.6} /></AbsoluteFill>
-      <EndQuestion t={f / 30 + 3} at={0} q="ВЗЯЛ БЫ *ПАКЕТ?*" a="ДА" b="БЕЖАЛ БЫ" next="ПОДПИШИСЬ — ЧАСТЬ 3 СКОРО" />
+      <EndQuestion t={f / 30 + 3} at={0} q="ВЗЯЛ БЫ *ПАКЕТ?*" a="ДА" b="БЕЖАЛ БЫ" next="ПОДПИШИСЬ, ЧАСТЬ 3 СКОРО" />
       <Grain f={f} k={0.06} />
     </AbsoluteFill>
   );
