@@ -21,6 +21,7 @@ import {StyleSheet} from './toon/episodes/StyleSheet';
 import {LookFast, LookMid, LookHeavy, LT_FPS, LT_SEC} from './toon/episodes/LookTest';
 import {StylePuppet, StyleLino, StyleXray, ST_FPS, ST_SEC} from './toon/episodes/StyleTrio';
 import {LinoKnock, LinoElevator, LinoPhoto, LinoGames, LB_FPS, LB_SEC} from './toon/episodes/LinoBatch1';
+import {LinoBell, LinoSteps, LinoWindow, LinoCloset, LinoNight, LB2_SEC, NIGHT_SEC} from './toon/episodes/LinoBatch2';
 import {ShortKitDemo, ShortKitSheet, KD_FPS, KD_SEC} from './toon/episodes/ShortKitDemo';
 
 export const Root: React.FC = () => (
@@ -65,6 +66,11 @@ export const Root: React.FC = () => (
     <Composition id="LinoElevator" component={LinoElevator} width={1080} height={1920} fps={LB_FPS} durationInFrames={Math.round(LB_SEC.lift * LB_FPS)} />
     <Composition id="LinoPhoto" component={LinoPhoto} width={1080} height={1920} fps={LB_FPS} durationInFrames={Math.round(LB_SEC.photo * LB_FPS)} />
     <Composition id="LinoGames" component={LinoGames} width={1080} height={1920} fps={LB_FPS} durationInFrames={Math.round(LB_SEC.games * LB_FPS)} />
+    <Composition id="LinoBell" component={LinoBell} width={1080} height={1920} fps={30} durationInFrames={Math.round(LB2_SEC.bell * 30)} />
+    <Composition id="LinoSteps" component={LinoSteps} width={1080} height={1920} fps={30} durationInFrames={Math.round(LB2_SEC.steps * 30)} />
+    <Composition id="LinoWindow" component={LinoWindow} width={1080} height={1920} fps={30} durationInFrames={Math.round(LB2_SEC.window * 30)} />
+    <Composition id="LinoCloset" component={LinoCloset} width={1080} height={1920} fps={30} durationInFrames={Math.round(LB2_SEC.closet * 30)} />
+    <Composition id="LinoNight" component={LinoNight} width={1080} height={1920} fps={30} durationInFrames={Math.round(NIGHT_SEC * 30)} />
     <Composition id="StylePuppet" component={StylePuppet} width={1080} height={1920} fps={ST_FPS} durationInFrames={ST_SEC * ST_FPS} />
     <Composition id="StyleLino" component={StyleLino} width={1080} height={1920} fps={ST_FPS} durationInFrames={ST_SEC * ST_FPS} />
     <Composition id="StyleXray" component={StyleXray} width={1080} height={1920} fps={ST_FPS} durationInFrames={ST_SEC * ST_FPS} />

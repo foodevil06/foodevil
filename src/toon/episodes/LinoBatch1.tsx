@@ -58,7 +58,7 @@ export const LinoKnock: React.FC = () => {
     // the memory: grandma gives the keys, in a round frame
     world = <Peephole><WorldCam cam={{cx: 560, cy: 1120, z: 1.0}}><LinoDefs /><LinoHall t={0} feet={0} />
       <LinoFig id="b" p={CAST.grandma} x={420} y={1560} s={1.35} face={{mouth: 'flat', brow: -0.4}} armR={{sh: 60, el: 40}} />
-      <g transform="translate(650 1150)"><circle r={18} fill="none" stroke={LI.red} strokeWidth={6} /><rect x={14} y={-5} width={60} height={10} fill={LI.red} /><rect x={56} y={4} width={8} height={16} fill={LI.red} /></g>
+      <g transform="translate(628 1342) rotate(20)"><circle r={18} fill="none" stroke={LI.red} strokeWidth={6} /><rect x={14} y={-5} width={60} height={10} fill={LI.red} /><rect x={56} y={4} width={8} height={16} fill={LI.red} /></g>
       <LinoFig id="h" p={CAST.hero} x={830} y={1560} s={1.35} face={{mouth: 'flat', lx: -1}} /></WorldCam></Peephole>;
   } else if (t < L(4).start - 0.1) {
     // the first night: the peephole, nobody, a note on the floor

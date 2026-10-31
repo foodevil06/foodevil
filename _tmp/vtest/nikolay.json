@@ -1,0 +1,1 @@
+{"engine": "lumean", "voice": "3EuKHIEZbSzrHGNmdYsx", "model": "eleven_multilingual_v2", "stability": 0.5, "similarity": 0.8, "speed": 1.0, "lead": 0.2, "tail": 0.6, "lines": [{"say": "Если после трёх ночи в дверь стучат трижды, не смотри в глазок.", "gap": 0.5}, {"say": "Так сказала бабушка, когда отдала мне ключи от этой квартиры.", "gap": 0}]}

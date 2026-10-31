@@ -1,0 +1,8 @@
+1. Anton B - Calm & Straight | male middle_aged moscow | A soothing, low-key voice to help you drift off. | voice_id=AZ8raiNBSkBbrtDIBhFz
+2. Sergey Koshkin - Calm | male middle_aged standard | An excellent, distinctive voice, perfect for any kind of voice-over wo | voice_id=Q4o6QChfqZBZNW3dSH6O
+3. Pavel - Warm Conversational Narrator | male middle_aged standard | Warm, resonant Russian baritone with a natural, conversational deliver | voice_id=VlCYpQzyafIQIhmvxR2w
+4. Nik - Volleyball Blogger | male middle_aged standard | Bold, electrifying male voice with the charisma of a top American radi | voice_id=onwUCZkczHuzoAscXcPU
+5. Ivan - Narration | male middle_aged standard | Middle-aged Russian male voice. | voice_id=CD7zkojvx2OVr7zyCwFs
+6. Oleg - Pleasant | male middle_aged saint petersburg | A warm and pleasant voice that sounds genuinely and pleasant voice tha | voice_id=pTNfhcjNOnJJhOy9Jca3
+7. Thomas - Podcast | male middle_aged moscow | Podcast Host. | voice_id=4t01asKkkRyjapzfMsXU
+8. Ivan - Russian Storyteller | male middle_aged standard | A male voice blending the atmosphere of 19th-century literature with a | voice_id=1kb4Md8n0kMNktygYhDF
