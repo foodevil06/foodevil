@@ -22,8 +22,8 @@ export const LowKey: React.FC<{x?: number; y?: number; r?: number; k?: number}> 
 // smirk 0..1 a closed-mouth smile (the double), glint 0..1 an unnatural shine in the eyes, age 0..1 the old one from the
 // wardrobe (grey hair, lines, bags under sunken eyes)
 export type PersonSpec = {id: string; x: number; y: number; s?: number; phone?: 'ear' | 'chest' | 'none'; glow?: number; smile?: number; talk?: number; look?: number; full?: boolean;
-  smirk?: number; glint?: number; age?: number};
-export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', glow = 1, smile = 0, talk = 0, look = 0, full = false, smirk = 0, glint = 0, age = 0}) => {
+  smirk?: number; glint?: number; age?: number; wrong?: number};  // wrong 0..1: black sockets, pinpoint eyes, a grin wider than the face
+export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', glow = 1, smile = 0, talk = 0, look = 0, full = false, smirk = 0, glint = 0, age = 0, wrong = 0}) => {
   const lx = look * 14;
   // low-key: the screen lights only the cheek by the ear, or only the chin and the underside of the nose from below
   const light = phone === 'ear' ? {cx: 140, cy: -105, r: 125} : phone === 'chest' ? {cx: 0, cy: 0, r: 118} : {cx: 0, cy: -300, r: 10};
@@ -70,13 +70,16 @@ export const Person: React.FC<PersonSpec> = ({id, x, y, s = 1, phone = 'none', g
         {[-1, 1].map((k) => <g key={k}>
           <path d={`M ${k * 30 - 16} -152 Q ${k * 30} ${-158} ${k * 30 + 16} -151`} stroke="#0c0d10" strokeWidth={5} fill="none" strokeLinecap="round" />
           <ellipse cx={k * 30} cy={-128} rx={11} ry={6} fill="#0a0b0d" />
+          {wrong > 0 && <g opacity={wrong}><ellipse cx={k * 30} cy={-127} rx={23} ry={19} fill="#000" />
+            <circle cx={k * 30 + k * 2} cy={-126} r={3.2} fill="#f2f6ff" /></g>}
           <circle cx={k * 30 + 3} cy={-130} r={2.4 + 2.6 * glint} fill="#eef4ff" opacity={eyeLit} />
         </g>)}
         <path d="M -2 -120 L 8 -92 L -6 -88" stroke="#16181c" strokeWidth={3.5} fill="none" strokeLinecap="round" opacity={0.7} />
         <path d={`M -24 ${-64 - 7 * smirk} Q 0 ${-61 + 7 * smirk} 24 ${-64 - 7 * smirk}`} stroke="#141518" strokeWidth={4} fill="none" strokeLinecap="round" opacity={1 - smile} />
         {talk > 0 && smile < 0.5 && <ellipse cx={0} cy={-62} rx={14} ry={2 + 7 * talk} fill="#08090a" />}
-        {smile > 0 && <g opacity={smile}>
+        {smile > 0 && <g opacity={smile} transform={`scale(${1 + 0.55 * wrong} 1) translate(0 ${-6 * wrong})`}>
           <path d="M -46 -76 Q 0 -26 46 -76 Q 0 -50 -46 -76 Z" fill="#d6d2c8" stroke="#0a0b0c" strokeWidth={3} />
+          {wrong > 0 && [-30, -18, -6, 6, 18, 30].map((xx) => <line key={xx} x1={xx} y1={-70 + Math.abs(xx) * 0.1} x2={xx} y2={-50 + Math.abs(xx) * 0.35} stroke="#0a0b0c" strokeWidth={2} opacity={wrong} />)}
           <path d="M -46 -76 Q -54 -86 -50 -92 M 46 -76 Q 54 -86 50 -92" stroke="#0a0b0c" strokeWidth={3} fill="none" />
         </g>}
       </g>
